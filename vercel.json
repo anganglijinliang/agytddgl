@@ -44,5 +44,12 @@
         }
       ]
     }
+  ],
+  "routes": [
+    {
+      "src": "/favicon.ico",
+      "dest": "/public/favicon.ico",
+      "headers": { "cache-control": "public, max-age=3600, immutable" }
+    }
   ]
 } 

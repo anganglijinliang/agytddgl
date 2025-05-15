@@ -20,13 +20,10 @@ export async function middleware(req: NextRequest) {
   
   console.log(`[${requestId}] 中间件处理请求: ${pathname}`);
   
-  // 特殊处理favicon.ico请求
+  // 特殊处理favicon.ico请求 - 完全跳过中间件处理
   if (pathname === "/favicon.ico") {
-    // 由于我们已经在根目录放置了favicon.ico，直接放行这个请求
-    console.log(`[${requestId}] 放行favicon.ico请求`);
-    const response = NextResponse.next();
-    response.headers.set("x-middleware-cache", "no-cache");
-    return response;
+    console.log(`[${requestId}] 完全跳过favicon.ico请求`);
+    return; // 直接返回undefined，让Next.js继续处理
   }
   
   // 1. 尝试从NextAuth获取令牌
