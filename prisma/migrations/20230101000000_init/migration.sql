@@ -1,32 +1,32 @@
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "UserRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'ORDER_SPECIALIST', 'PRODUCTION_STAFF', 'SHIPPING_STAFF', 'READ_ONLY');
+CREATE TYPE "UserRole" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'ORDER_SPECIALIST', 'PRODUCTION_STAFF', 'SHIPPING_STAFF', 'READ_ONLY');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "OrderStatus" AS ENUM ('DRAFT', 'CONFIRMED', 'IN_PRODUCTION', 'PARTIALLY_SHIPPED', 'COMPLETED', 'CANCELED');
+CREATE TYPE "OrderStatus" AS ENUM ('DRAFT', 'CONFIRMED', 'IN_PRODUCTION', 'PARTIALLY_SHIPPED', 'COMPLETED', 'CANCELED');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "ShippingMethod" AS ENUM ('SELF_DELIVERY', 'CUSTOMER_PICKUP');
+CREATE TYPE "ShippingMethod" AS ENUM ('SELF_DELIVERY', 'CUSTOMER_PICKUP');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "ProductionLineType" AS ENUM ('WORKSHOP_ONE', 'WORKSHOP_TWO', 'WORKSHOP_THREE');
+CREATE TYPE "ProductionLineType" AS ENUM ('WORKSHOP_ONE', 'WORKSHOP_TWO', 'WORKSHOP_THREE');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "PriorityLevel" AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT', 'CRITICAL');
+CREATE TYPE "PriorityLevel" AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT', 'CRITICAL');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "TeamType" AS ENUM ('TEAM_A', 'TEAM_B', 'TEAM_C', 'TEAM_D');
+CREATE TYPE "TeamType" AS ENUM ('TEAM_A', 'TEAM_B', 'TEAM_C', 'TEAM_D');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "ShiftType" AS ENUM ('DAY_SHIFT', 'MIDDLE_SHIFT', 'NIGHT_SHIFT');
+CREATE TYPE "ShiftType" AS ENUM ('DAY_SHIFT', 'MIDDLE_SHIFT', 'NIGHT_SHIFT');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "ProductionStatus" AS ENUM ('NOT_STARTED', 'IN_PROGRESS', 'FINISHED');
+CREATE TYPE "ProductionStatus" AS ENUM ('NOT_STARTED', 'IN_PROGRESS', 'FINISHED');
 
 -- CreateEnum
-CREATE TYPE IF NOT EXISTS "TransportationType" AS ENUM ('TRUCK', 'TRAIN', 'SHIP', 'OTHER');
+CREATE TYPE "TransportationType" AS ENUM ('TRUCK', 'TRAIN', 'SHIP', 'OTHER');
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "User" (
+CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "name" TEXT,
     "email" TEXT,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS "User" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Account" (
+CREATE TABLE "Account" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "type" TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS "Account" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Session" (
+CREATE TABLE "Session" (
     "id" TEXT NOT NULL,
     "sessionToken" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -72,14 +72,14 @@ CREATE TABLE IF NOT EXISTS "Session" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "VerificationToken" (
+CREATE TABLE "VerificationToken" (
     "identifier" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "expires" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Customer" (
+CREATE TABLE "Customer" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "contactName" TEXT,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS "Customer" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Order" (
+CREATE TABLE "Order" (
     "id" TEXT NOT NULL,
     "orderNumber" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS "Order" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "SubOrder" (
+CREATE TABLE "SubOrder" (
     "id" TEXT NOT NULL,
     "orderId" TEXT NOT NULL,
     "specification" TEXT NOT NULL,
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS "SubOrder" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "ProductionLine" (
+CREATE TABLE "ProductionLine" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "type" "ProductionLineType" NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS "ProductionLine" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Warehouse" (
+CREATE TABLE "Warehouse" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "location" TEXT,
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS "Warehouse" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Production" (
+CREATE TABLE "Production" (
     "id" TEXT NOT NULL,
     "subOrderId" TEXT NOT NULL,
     "productionLineId" TEXT NOT NULL,
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS "Production" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Shipping" (
+CREATE TABLE "Shipping" (
     "id" TEXT NOT NULL,
     "subOrderId" TEXT NOT NULL,
     "warehouseId" TEXT NOT NULL,
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS "Shipping" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "AuditLog" (
+CREATE TABLE "AuditLog" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "orderId" TEXT,
@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS "AuditLog" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Specification" (
+CREATE TABLE "Specification" (
     "id" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS "Specification" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Grade" (
+CREATE TABLE "Grade" (
     "id" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS "Grade" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "InterfaceType" (
+CREATE TABLE "InterfaceType" (
     "id" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
@@ -266,7 +266,7 @@ CREATE TABLE IF NOT EXISTS "InterfaceType" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Lining" (
+CREATE TABLE "Lining" (
     "id" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
@@ -277,7 +277,7 @@ CREATE TABLE IF NOT EXISTS "Lining" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Length" (
+CREATE TABLE "Length" (
     "id" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
@@ -288,7 +288,7 @@ CREATE TABLE IF NOT EXISTS "Length" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Anticorrosion" (
+CREATE TABLE "Anticorrosion" (
     "id" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "description" TEXT,
@@ -299,7 +299,7 @@ CREATE TABLE IF NOT EXISTS "Anticorrosion" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "Notification" (
+CREATE TABLE "Notification" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -314,85 +314,85 @@ CREATE TABLE IF NOT EXISTS "Notification" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId");
+CREATE UNIQUE INDEX "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Session_sessionToken_key" ON "Session"("sessionToken");
+CREATE UNIQUE INDEX "Session_sessionToken_key" ON "Session"("sessionToken");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "VerificationToken_token_key" ON "VerificationToken"("token");
+CREATE UNIQUE INDEX "VerificationToken_token_key" ON "VerificationToken"("token");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "VerificationToken_identifier_token_key" ON "VerificationToken"("identifier", "token");
+CREATE UNIQUE INDEX "VerificationToken_identifier_token_key" ON "VerificationToken"("identifier", "token");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Order_orderNumber_key" ON "Order"("orderNumber");
+CREATE UNIQUE INDEX "Order_orderNumber_key" ON "Order"("orderNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Specification_value_key" ON "Specification"("value");
+CREATE UNIQUE INDEX "Specification_value_key" ON "Specification"("value");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Grade_value_key" ON "Grade"("value");
+CREATE UNIQUE INDEX "Grade_value_key" ON "Grade"("value");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "InterfaceType_value_key" ON "InterfaceType"("value");
+CREATE UNIQUE INDEX "InterfaceType_value_key" ON "InterfaceType"("value");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Lining_value_key" ON "Lining"("value");
+CREATE UNIQUE INDEX "Lining_value_key" ON "Lining"("value");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Length_value_key" ON "Length"("value");
+CREATE UNIQUE INDEX "Length_value_key" ON "Length"("value");
 
 -- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "Anticorrosion_value_key" ON "Anticorrosion"("value");
+CREATE UNIQUE INDEX "Anticorrosion_value_key" ON "Anticorrosion"("value");
 
 -- AddForeignKey
-ALTER TABLE "Account" ADD CONSTRAINT IF NOT EXISTS "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Session" ADD CONSTRAINT IF NOT EXISTS "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Order" ADD CONSTRAINT IF NOT EXISTS "Order_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Order" ADD CONSTRAINT "Order_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Order" ADD CONSTRAINT IF NOT EXISTS "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Order" ADD CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "SubOrder" ADD CONSTRAINT IF NOT EXISTS "SubOrder_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "SubOrder" ADD CONSTRAINT "SubOrder_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "SubOrder" ADD CONSTRAINT IF NOT EXISTS "SubOrder_productionLineId_fkey" FOREIGN KEY ("productionLineId") REFERENCES "ProductionLine"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SubOrder" ADD CONSTRAINT "SubOrder_productionLineId_fkey" FOREIGN KEY ("productionLineId") REFERENCES "ProductionLine"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "SubOrder" ADD CONSTRAINT IF NOT EXISTS "SubOrder_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SubOrder" ADD CONSTRAINT "SubOrder_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Production" ADD CONSTRAINT IF NOT EXISTS "Production_subOrderId_fkey" FOREIGN KEY ("subOrderId") REFERENCES "SubOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Production" ADD CONSTRAINT "Production_subOrderId_fkey" FOREIGN KEY ("subOrderId") REFERENCES "SubOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Production" ADD CONSTRAINT IF NOT EXISTS "Production_productionLineId_fkey" FOREIGN KEY ("productionLineId") REFERENCES "ProductionLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Production" ADD CONSTRAINT "Production_productionLineId_fkey" FOREIGN KEY ("productionLineId") REFERENCES "ProductionLine"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Production" ADD CONSTRAINT IF NOT EXISTS "Production_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Production" ADD CONSTRAINT "Production_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Shipping" ADD CONSTRAINT IF NOT EXISTS "Shipping_subOrderId_fkey" FOREIGN KEY ("subOrderId") REFERENCES "SubOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Shipping" ADD CONSTRAINT "Shipping_subOrderId_fkey" FOREIGN KEY ("subOrderId") REFERENCES "SubOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Shipping" ADD CONSTRAINT IF NOT EXISTS "Shipping_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Shipping" ADD CONSTRAINT "Shipping_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Shipping" ADD CONSTRAINT IF NOT EXISTS "Shipping_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Shipping" ADD CONSTRAINT "Shipping_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AuditLog" ADD CONSTRAINT IF NOT EXISTS "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AuditLog" ADD CONSTRAINT IF NOT EXISTS "AuditLog_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Notification" ADD CONSTRAINT IF NOT EXISTS "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE; 
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE; 

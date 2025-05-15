@@ -15,28 +15,49 @@ interface CustomJwtPayload extends JwtPayload {
 
 // 中间件函数，处理每个请求
 export async function middleware(req: NextRequest) {
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
   const { pathname } = req.nextUrl;
+  
+  console.log(`[${requestId}] 中间件处理请求: ${pathname}`);
   
   // 特殊处理favicon.ico请求
   if (pathname === "/favicon.ico") {
     // 由于我们已经在根目录放置了favicon.ico，直接放行这个请求
-    return NextResponse.next();
+    console.log(`[${requestId}] 放行favicon.ico请求`);
+    const response = NextResponse.next();
+    response.headers.set("x-middleware-cache", "no-cache");
+    return response;
   }
   
   // 1. 尝试从NextAuth获取令牌
-  const nextAuthToken = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  console.log(`[${requestId}] 尝试获取NextAuth令牌...`);
+  const nextAuthToken = await getToken({ 
+    req, 
+    secret: process.env.NEXTAUTH_SECRET,
+    cookieName: process.env.NODE_ENV === 'production' ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
+  });
+  
+  if (nextAuthToken) {
+    console.log(`[${requestId}] 成功获取NextAuth令牌，用户: ${nextAuthToken.email || 'unknown'}`);
+  } else {
+    console.log(`[${requestId}] 未找到NextAuth令牌`);
+  }
   
   // 2. 尝试从自定义Cookie获取令牌
+  console.log(`[${requestId}] 尝试获取自定义令牌...`);
   let customToken: CustomJwtPayload | null = null;
   const authCookie = req.cookies.get("auth-token");
   
   if (authCookie?.value) {
     try {
       customToken = verify(authCookie.value, SECRET_KEY) as CustomJwtPayload;
-      console.log("自定义令牌验证成功:", customToken);
+      console.log(`[${requestId}] 成功获取自定义令牌，用户: ${customToken.email || 'unknown'}`);
     } catch (error) {
-      console.error("自定义令牌验证失败:", error);
+      console.error(`[${requestId}] 自定义令牌验证失败:`, error);
     }
+  } else {
+    console.log(`[${requestId}] 未找到自定义令牌cookie`);
+    console.log(`[${requestId}] 所有可用cookies:`, Array.from(req.cookies.getAll()).map(c => c.name).join(', '));
   }
   
   // 使用任一有效的令牌
@@ -51,7 +72,7 @@ export async function middleware(req: NextRequest) {
   ) : 'guest';
 
   // 调试日志
-  console.log("中间件处理:", { 
+  console.log(`[${requestId}] 中间件认证状态:`, { 
     path: pathname, 
     isAuthenticated, 
     tokenType: nextAuthToken ? "nextauth" : (customToken ? "custom" : "none"),
@@ -68,7 +89,10 @@ export async function middleware(req: NextRequest) {
     pathname.includes(".") ||
     pathname === "/favicon.ico"
   ) {
-    return NextResponse.next();
+    console.log(`[${requestId}] 放行API或静态资源路由: ${pathname}`);
+    const response = NextResponse.next();
+    response.headers.set("x-middleware-cache", "no-cache");
+    return response;
   }
 
   // 公开路由，无需认证
@@ -81,21 +105,34 @@ export async function middleware(req: NextRequest) {
     "/simple-login",
     "/auth-debug"
   ];
+  
   if (publicPaths.includes(pathname) || pathname === "/") {
     // 如果已登录并访问登录页，重定向到面板
     if (isAuthenticated && (pathname === "/login" || pathname === "/" || pathname === "/simple-login" || pathname === "/test-login")) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+      console.log(`[${requestId}] 已认证用户访问登录页，重定向到dashboard`);
+      const redirectResponse = NextResponse.redirect(new URL("/dashboard", req.url));
+      redirectResponse.headers.set("x-middleware-cache", "no-cache");
+      return redirectResponse;
     }
-    return NextResponse.next();
+    console.log(`[${requestId}] 放行公开路由: ${pathname}`);
+    const response = NextResponse.next();
+    response.headers.set("x-middleware-cache", "no-cache");
+    return response;
   }
 
   // 需要认证但未认证的路由，重定向到登录页
   if (!isAuthenticated) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    console.log(`[${requestId}] 未认证用户访问受保护路由: ${pathname}，重定向到登录页`);
+    const redirectResponse = NextResponse.redirect(new URL("/login", req.url));
+    redirectResponse.headers.set("x-middleware-cache", "no-cache");
+    return redirectResponse;
   }
 
   // 已认证用户，继续请求
-  return NextResponse.next();
+  console.log(`[${requestId}] 已认证用户访问受保护路由: ${pathname}，放行请求`);
+  const response = NextResponse.next();
+  response.headers.set("x-middleware-cache", "no-cache");
+  return response;
 }
 
 // 配置中间件匹配的路由

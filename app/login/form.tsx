@@ -8,7 +8,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-export default function LoginForm() {
+interface LoginFormProps {
+  error?: string;
+}
+
+export default function LoginForm({ error }: LoginFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
@@ -20,13 +24,20 @@ export default function LoginForm() {
   const [password, setPassword] = useState("Admin123!");
   const [loginAttempts, setLoginAttempts] = useState(0);
 
-  // 检查URL中是否有错误信息
+  // 检查URL中是否有错误信息或者通过props传入的错误
   useEffect(() => {
+    // 首先检查props传入的错误
+    if (error) {
+      setErrorMsg(getErrorMessage(error));
+      return;
+    }
+    
+    // 然后检查URL参数中的错误
     const errorFromUrl = searchParams?.get("error");
     if (errorFromUrl) {
       setErrorMsg(getErrorMessage(errorFromUrl));
     }
-  }, [searchParams]);
+  }, [searchParams, error]);
 
   // 获取错误信息
   const getErrorMessage = (errorCode: string) => {
