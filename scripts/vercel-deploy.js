@@ -52,13 +52,23 @@ async function main() {
       // 1. 运行数据库迁移
       console.log('执行数据库同步...');
       try {
-        // 注释掉这行以避免卡住
-        // execSync('npx prisma db push --accept-data-loss --force-reset', { stdio: 'inherit' });
-        console.log('数据库同步步骤已跳过，请手动同步数据库或设置SKIP_DB_SYNC=true');
+        console.log('数据库连接类型:', isStandardPostgres ? 'Standard PostgreSQL' : 'Prisma Accelerate');
+        console.log('数据库连接URL(部分):', process.env.DATABASE_URL.substring(0, 15) + '...');
+        
+        // 使用Prisma migrate deploy来应用迁移，这更适合生产环境
+        execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+        console.log('数据库迁移已成功应用');
       } catch (error) {
-        console.error('数据库同步失败:', error.message);
-        // 不抛出错误，让部署继续
-        console.log('继续部署过程...');
+        console.error('数据库迁移失败，尝试使用db push:', error.message);
+        try {
+          // 如果migrate deploy失败，尝试使用db push
+          execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+          console.log('数据库结构已通过db push创建');
+        } catch (pushError) {
+          console.error('数据库同步失败:', pushError.message);
+          // 记录错误但继续部署，避免部署失败
+          console.log('继续部署过程，但可能需要手动设置数据库...');
+        }
       }
     }
     

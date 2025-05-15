@@ -13,11 +13,18 @@
   ],
   "env": {
     "NEXTAUTH_URL": "${VERCEL_URL}",
-    "DATABASE_URL": "${DATABASE_URL}",
+    "DATABASE_URL": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
     "NEXTAUTH_SECRET": "${NEXTAUTH_SECRET}",
     "CRON_API_KEY": "${CRON_API_KEY}",
     "NODE_ENV": "production",
-    "SKIP_DB_SYNC": "true"
+    "SKIP_DB_SYNC": "false",
+    "POSTGRES_URL": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
+    "POSTGRES_URL_NON_POOLING": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
+    "POSTGRES_USER": "neondb_owner",
+    "POSTGRES_HOST": "ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech",
+    "POSTGRES_PASSWORD": "npg_TqiB2gGU3ZyV",
+    "POSTGRES_DATABASE": "neondb",
+    "POSTGRES_PRISMA_URL": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech/neondb?connect_timeout=15&sslmode=require"
   },
   "headers": [
     {
