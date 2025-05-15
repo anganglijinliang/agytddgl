@@ -1,0 +1,355 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  ORDER_SPECIALIST
+  PRODUCTION_STAFF
+  SHIPPING_STAFF
+  READ_ONLY
+}
+
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  IN_PRODUCTION
+  PARTIALLY_SHIPPED
+  COMPLETED
+  CANCELED
+}
+
+enum ShippingMethod {
+  SELF_DELIVERY
+  CUSTOMER_PICKUP
+}
+
+enum ProductionLineType {
+  WORKSHOP_ONE
+  WORKSHOP_TWO
+  WORKSHOP_THREE
+}
+
+enum PriorityLevel {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum TeamType {
+  TEAM_A
+  TEAM_B
+  TEAM_C
+  TEAM_D
+}
+
+enum ShiftType {
+  DAY_SHIFT
+  MIDDLE_SHIFT
+  NIGHT_SHIFT
+}
+
+enum ProductionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  FINISHED
+}
+
+enum TransportationType {
+  TRUCK
+  TRAIN
+  SHIP
+  OTHER
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  emailVerified   DateTime?
+  image           String?
+  password        String?
+  role            UserRole  @default(READ_ONLY)
+  departmentId    String?
+  position        String?
+  phoneNumber     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  orders          Order[]
+  productions     Production[]
+  shippings       Shipping[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  name         String
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  city         String?
+  province     String?
+  country      String?
+  postalCode   String?
+  taxId        String?
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders       Order[]
+}
+
+model Order {
+  id                String         @id @default(cuid())
+  orderNumber       String         @unique
+  customerId        String
+  userId            String
+  status            OrderStatus    @default(DRAFT)
+  shippingMethod    ShippingMethod
+  shippingAddress   String?        @db.Text
+  paymentTerms      String?
+  totalAmount       Float?
+  paymentStatus     String?
+  attachments       String[]
+  notes             String?        @db.Text
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  customer          Customer       @relation(fields: [customerId], references: [id])
+  user              User           @relation(fields: [userId], references: [id])
+  subOrders         SubOrder[]
+}
+
+model SubOrder {
+  id               String             @id @default(cuid())
+  orderId          String
+  specification    String
+  grade            String
+  interfaceType    String
+  lining           String
+  length           String
+  anticorrosion    String
+  plannedQuantity  Int
+  productionLineId String?
+  warehouseId      String?
+  deliveryDate     DateTime
+  priorityLevel    PriorityLevel      @default(NORMAL)
+  unitWeight       Float
+  totalWeight      Float
+  notes            String?            @db.Text
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  order            Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productionLine   ProductionLine?    @relation(fields: [productionLineId], references: [id])
+  warehouse        Warehouse?         @relation(fields: [warehouseId], references: [id])
+  production       Production[]
+  shipping         Shipping[]
+}
+
+model ProductionLine {
+  id          String             @id @default(cuid())
+  name        String
+  type        ProductionLineType
+  capacity    Int?
+  description String?            @db.Text
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  subOrders   SubOrder[]
+  production  Production[]
+}
+
+model Warehouse {
+  id          String     @id @default(cuid())
+  name        String
+  location    String?
+  capacity    Int?
+  description String?    @db.Text
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  subOrders   SubOrder[]
+  shipping    Shipping[]
+}
+
+model Production {
+  id               String           @id @default(cuid())
+  subOrderId       String
+  productionLineId String
+  userId           String
+  team             TeamType
+  shift            ShiftType
+  productionDate   DateTime
+  quantity         Int
+  status           ProductionStatus @default(NOT_STARTED)
+  startTime        DateTime?
+  endTime          DateTime?
+  qualityNotes     String?          @db.Text
+  materialUsage    String?          @db.Text
+  notes            String?          @db.Text
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  subOrder         SubOrder         @relation(fields: [subOrderId], references: [id])
+  productionLine   ProductionLine   @relation(fields: [productionLineId], references: [id])
+  user             User             @relation(fields: [userId], references: [id])
+}
+
+model Shipping {
+  id               String             @id @default(cuid())
+  subOrderId       String
+  warehouseId      String
+  userId           String
+  shippingDate     DateTime
+  transportType    TransportationType
+  carrierName      String?
+  vehicleInfo      String?
+  driverInfo       String?
+  shippingNumber   String?
+  quantity         Int
+  destinationInfo  String?           @db.Text
+  estimatedArrival DateTime?
+  signedStatus     Boolean           @default(false)
+  signedAt         DateTime?
+  proofImages      String[]
+  notes            String?           @db.Text
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  subOrder         SubOrder          @relation(fields: [subOrderId], references: [id])
+  warehouse        Warehouse         @relation(fields: [warehouseId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  action      String    // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, EXPORT, IMPORT, VIEW, CHANGE_STATUS, SYSTEM
+  resource    String    // USER, ORDER, SUB_ORDER, CUSTOMER, PRODUCTION, SHIPPING, MASTER_DATA, SETTING, SYSTEM
+  resourceId  String?
+  description String    @db.Text
+  metadata    String?   @db.Text
+  ipAddress   String?
+  userAgent   String?   @db.Text
+  createdAt   DateTime  @default(now())
+
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Specification {
+  id          String   @id @default(cuid())
+  value       String   @unique
+  description String?
+  unitWeight  Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Grade {
+  id          String   @id @default(cuid())
+  value       String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model InterfaceType {
+  id          String   @id @default(cuid())
+  value       String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Lining {
+  id          String   @id @default(cuid())
+  value       String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Length {
+  id          String   @id @default(cuid())
+  value       String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Anticorrosion {
+  id          String   @id @default(cuid())
+  value       String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   // info, success, warning, error
+  read      Boolean  @default(false)
+  linkUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+} 

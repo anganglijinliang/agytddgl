@@ -1,0 +1,26 @@
+// 审计日志资源类型
+export enum LogResource {
+  USER = "USER",
+  ORDER = "ORDER",
+  SUB_ORDER = "SUB_ORDER",
+  CUSTOMER = "CUSTOMER",
+  PRODUCTION = "PRODUCTION",
+  SHIPPING = "SHIPPING",
+  MASTER_DATA = "MASTER_DATA",
+  SETTING = "SETTING",
+  SYSTEM = "SYSTEM"
+}
+
+// 审计日志操作类型
+export enum LogAction {
+  CREATE = "CREATE",
+  UPDATE = "UPDATE",
+  DELETE = "DELETE",
+  LOGIN = "LOGIN",
+  LOGOUT = "LOGOUT",
+  EXPORT = "EXPORT",
+  IMPORT = "IMPORT",
+  VIEW = "VIEW",
+  CHANGE_STATUS = "CHANGE_STATUS",
+  SYSTEM = "SYSTEM"
+} 

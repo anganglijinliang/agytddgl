@@ -1,0 +1,40 @@
+{
+  "name": "angang-order-management-system",
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next",
+      "config": {
+        "buildCommand": "npm run vercel-build",
+        "outputDirectory": ".next"
+      }
+    }
+  ],
+  "env": {
+    "NEXTAUTH_URL": "${VERCEL_URL}",
+    "DATABASE_URL": "${DATABASE_URL}",
+    "NEXTAUTH_SECRET": "${NEXTAUTH_SECRET}",
+    "CRON_API_KEY": "${CRON_API_KEY}",
+    "NODE_ENV": "production"
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+} 
