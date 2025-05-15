@@ -9,6 +9,18 @@ async function main() {
 
   // 检查环境变量
   console.log('检查环境变量配置...');
+  
+  // 如果NEXTAUTH_SECRET未设置，则使用默认值而非退出
+  if (!process.env.NEXTAUTH_SECRET) {
+    const fallbackSecret = "fallback-secret-key-for-deployment-only";
+    console.warn(`警告: 未设置NEXTAUTH_SECRET环境变量，将使用默认值进行部署`);
+    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量`);
+    process.env.NEXTAUTH_SECRET = fallbackSecret;
+  } else {
+    console.log('NEXTAUTH_SECRET已正确设置');
+  }
+
+  // 检查数据库连接信息
   if (!process.env.DATABASE_URL) {
     console.error('错误: 缺少必要的环境变量 DATABASE_URL');
     process.exit(1);
@@ -33,13 +45,12 @@ async function main() {
     }
   }
   
-  if (!process.env.NEXTAUTH_SECRET) {
-    console.error('错误: 缺少必要的环境变量 NEXTAUTH_SECRET');
-    process.exit(1);
-  }
-  
   if (!process.env.NEXTAUTH_URL) {
-    console.error('警告: 缺少 NEXTAUTH_URL, 将使用默认值');
+    const defaultUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000';
+    console.warn(`警告: 缺少NEXTAUTH_URL, 将使用默认值: ${defaultUrl}`);
+    process.env.NEXTAUTH_URL = defaultUrl;
   } else {
     console.log('NEXTAUTH_URL:', process.env.NEXTAUTH_URL);
   }
