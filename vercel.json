@@ -16,7 +16,8 @@
     "DATABASE_URL": "${DATABASE_URL}",
     "NEXTAUTH_SECRET": "${NEXTAUTH_SECRET}",
     "CRON_API_KEY": "${CRON_API_KEY}",
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "SKIP_DB_SYNC": "true"
   },
   "headers": [
     {
