@@ -43,13 +43,15 @@
           "value": "1; mode=block"
         }
       ]
-    }
-  ],
-  "routes": [
+    },
     {
-      "src": "/favicon.ico",
-      "dest": "/public/favicon.ico",
-      "headers": { "cache-control": "public, max-age=3600, immutable" }
+      "source": "/favicon.ico",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     }
   ]
 } 
