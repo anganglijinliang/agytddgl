@@ -1,10 +1,11 @@
-import { getShipping } from "../actions";
+import { getShipping, getDropdownData } from "../actions";
 import { format } from "date-fns";
 import { notFound } from "next/navigation";
 import { Heading } from "@/components/ui/heading";
 import { Separator } from "@/components/ui/separator";
 import { ShippingForm } from "../components/shipping-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { db } from "@/lib/db";
 
 interface ShippingDetailsPageProps {
   params: {
@@ -18,6 +19,60 @@ const ShippingDetailsPage = async ({ params }: ShippingDetailsPageProps) => {
   if (!shipping) {
     notFound();
   }
+  
+  // u83b7u53d6u6240u6709u4ed3u5e93
+  const warehouses = await db.warehouse.findMany();
+  
+  // u83b7u53d6u4e0bu62c9u83dcu5355u6570u636e
+  const { subOrders: availableSubOrders } = await getDropdownData();
+  
+  // u83b7u53d6u5b50u8ba2u5355u8be6u7ec6u6570u636e
+  const subOrders = await db.subOrder.findMany({
+    where: {
+      id: {
+        in: [...availableSubOrders.map(so => so.id), shipping.subOrderId],
+      },
+    },
+    include: {
+      order: {
+        include: {
+          customer: true,
+        },
+      },
+      production: true,
+      shipping: true,
+    },
+  });
+  
+  // u683cu5f0fu5316u5b50u8ba2u5355u6570u636eu4ee5u5339u914dShippingFormu7ec4u4ef6u7684u9700u6c42
+  const formattedSubOrders = subOrders.map(subOrder => {
+    const producedQuantity = subOrder.production.reduce((sum, p) => sum + p.quantity, 0);
+    const shippedQuantity = subOrder.shipping.reduce((sum, s) => sum + s.quantity, 0);
+    const progress = Math.round((producedQuantity / subOrder.plannedQuantity) * 100);
+    const shippingProgress = Math.round((shippedQuantity / subOrder.plannedQuantity) * 100);
+    // u8ba1u7b97u5f53u524du5b50u8ba2u5355u76eeu524du53efu4ee5u53d1u8fd0u7684u6570u91cf
+    const remainingQuantity = producedQuantity - shippedQuantity;
+    
+    return {
+      id: subOrder.id,
+      specification: subOrder.specification,
+      grade: subOrder.grade,
+      plannedQuantity: subOrder.plannedQuantity, 
+      producedQuantity,
+      shippedQuantity,
+      progress,
+      shippingProgress,
+      remainingQuantity,
+      warehouseId: subOrder.warehouseId,
+      label: `${subOrder.order.orderNumber} - ${subOrder.order.customer.name} - ${subOrder.specification}`,
+      order: {
+        orderNumber: subOrder.order.orderNumber,
+        customer: {
+          name: subOrder.order.customer.name,
+        },
+      },
+    };
+  });
 
   const transportationMap = {
     TRAIN: "火车",
@@ -154,7 +209,9 @@ const ShippingDetailsPage = async ({ params }: ShippingDetailsPageProps) => {
         <Heading title="编辑发货记录" description="修改发货记录信息" />
         <div className="mt-4">
           <ShippingForm 
-            initialData={shipping} 
+            initialData={shipping}
+            warehouses={warehouses}
+            subOrders={formattedSubOrders}
           />
         </div>
       </div>

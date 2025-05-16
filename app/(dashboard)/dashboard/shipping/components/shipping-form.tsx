@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -109,34 +109,65 @@ type Warehouse = {
 interface ShippingFormProps {
   warehouses: Warehouse[];
   subOrders: SubOrder[];
+  initialData?: any; // u6dfbu52a0u652fu6301u7f16u8f91u6a21u5f0fu7684initialDatau5c5eu6027
 }
 
 export function ShippingForm({
   warehouses,
   subOrders,
+  initialData,
 }: ShippingFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSubOrder, setSelectedSubOrder] = useState<SubOrder | null>(null);
 
-  // 设置默认值
-  const defaultValues: Partial<ShippingFormValues> = {
-    shippingDate: new Date(),
-    transportType: TransportationType.TRUCK,
-  };
+  // u6839u636eu662fu5426u6709initialDatau51b3u5b9au662fu65b0u5efau8fd8u662fu7f16u8f91u6a21u5f0f
+  const isEditMode = !!initialData;
 
+  // u8bbeu7f6eu9ed8u8ba4u503cuff0cu5982u679cu662fu7f16u8f91u6a21u5f0fu5219u4f7fu7528initialData
+  const defaultValues: Partial<ShippingFormValues> = isEditMode
+    ? {
+        subOrderId: initialData.subOrder.id,
+        warehouseId: initialData.warehouseId || initialData.subOrder.warehouseId || '',
+        shippingDate: initialData.shippingDate ? new Date(initialData.shippingDate) : new Date(),
+        transportType: initialData.transportType,
+        carrierName: initialData.carrierName || '',
+        vehicleInfo: initialData.vehicleInfo || '',
+        driverInfo: initialData.driverInfo || '',
+        shippingNumber: initialData.shippingNumber || '',
+        quantity: initialData.quantity,
+        destinationInfo: initialData.destinationInfo || '',
+        estimatedArrival: initialData.estimatedArrival ? new Date(initialData.estimatedArrival) : undefined,
+        notes: initialData.notes || '',
+      }
+    : {
+        shippingDate: new Date(),
+        transportType: TransportationType.TRUCK,
+      };
+  
   const form = useForm<ShippingFormValues>({
     resolver: zodResolver(shippingFormSchema),
     defaultValues,
   });
 
-  // 当子订单改变时更新选中的子订单
+  // u4f7fu7528 useEffect u521du59cbu5316u9009u4e2du7684u5b50u8ba2u5355
+  useEffect(() => {
+    if (isEditMode && initialData.subOrder) {
+      const subOrderId = initialData.subOrder.id;
+      const foundSubOrder = subOrders.find(order => order.id === subOrderId);
+      if (foundSubOrder) {
+        setSelectedSubOrder(foundSubOrder);
+      }
+    }
+  }, [isEditMode, initialData, subOrders]);
+
+  // u5f53u5b50u8ba2u5355u6539u53d8u65f6u66f4u65b0u9009u4e2du7684u5b50u8ba2u5355
   const handleSubOrderChange = (value: string) => {
     form.setValue("subOrderId", value);
     const selected = subOrders.find((subOrder) => subOrder.id === value);
     setSelectedSubOrder(selected || null);
 
-    // 如果子订单有默认仓库，则自动选择
+    // u5982u679cu5b50u8ba2u5355u6709u9ed8u8ba4u4ed3u5e93uff0cu5219u81eau52a8u9009u62e9
     if (selected?.warehouseId) {
       form.setValue("warehouseId", selected.warehouseId);
     }
@@ -146,21 +177,49 @@ export function ShippingForm({
     try {
       setIsLoading(true);
       
-      // 检查数量是否超过可发运数量
-      if (selectedSubOrder && data.quantity > selectedSubOrder.remainingQuantity) {
+      // u68c0u67e5u6570u91cfu662fu5426u8d85u8fc7u53efu53d1u8fd0u6570u91cfu9650u5236u5728u65b0u5efau6a21u5f0fu4e0b
+      if (!isEditMode && selectedSubOrder && data.quantity > selectedSubOrder.remainingQuantity) {
         toast.error(`发运支数不能超过剩余可发运支数 ${selectedSubOrder.remainingQuantity}`);
         return;
       }
       
-      // 发送请求
-      const result = await createShipping(data);
+      // u5c06Dateu5bf9u8c61u8f6cu6362u4e3au5b57u7b26u4e32u683cu5f0f
+      const formattedData = {
+        ...data,
+        // u5c06Dateu683cu5f0fu8f6cu6362u4e3au5b57u7b26u4e32
+        shippingDate: data.shippingDate ? format(data.shippingDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        estimatedArrival: data.estimatedArrival ? format(data.estimatedArrival, 'yyyy-MM-dd') : undefined
+      };
       
-      if (result.success) {
-        toast.success("发运记录创建成功");
-        router.push("/dashboard/shipping");
-        router.refresh();
+      // u6839u636eu6a21u5f0fu51b3u5b9au662fu65b0u5efau8fd8u662fu66f4u65b0
+      let result;
+      if (isEditMode) {
+        // u8c03u7528u66f4u65b0u63a5u53e3
+        result = await fetch(`/api/shipping/${initialData.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formattedData),
+        }).then(res => res.json());
+        
+        if (result.success) {
+          toast.success("发运记录更新成功");
+          router.refresh();
+        } else {
+          toast.error(result.error || "更新失败，请重试");
+        }
       } else {
-        toast.error(result.message || "创建失败，请重试");
+        // u8c03u7528u521bu5efau63a5u53e3
+        result = await createShipping(formattedData);
+        
+        if (result.success) {
+          toast.success("发运记录创建成功");
+          router.push("/dashboard/shipping");
+          router.refresh();
+        } else {
+          toast.error(result.error || "创建失败，请重试");
+        }
       }
     } catch (error) {
       toast.error("提交过程中出现错误");
@@ -493,8 +552,8 @@ export function ShippingForm({
           >
             取消
           </Button>
-          <Button type="submit" disabled={isLoading || !selectedSubOrder}>
-            {isLoading ? "提交中..." : "保存发运记录"}
+          <Button type="submit" disabled={isLoading || (!isEditMode && !selectedSubOrder)}>
+            {isLoading ? "提交中..." : isEditMode ? "更新发运记录" : "保存发运记录"}
           </Button>
         </div>
       </form>
