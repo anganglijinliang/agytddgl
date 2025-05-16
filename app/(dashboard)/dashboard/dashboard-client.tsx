@@ -1,80 +1,304 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Heading } from "@/components/ui/heading";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Overview } from "@/components/dashboard/overview";
+import { RecentOrders } from "@/components/dashboard/recent-orders";
+import { SmartAlert } from "../components/smart-alert";
+import { FileBarChart, Factory, TruckIcon, Package, Calendar, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/use-toast";
 
-export default function DashboardClient() {
+interface DashboardClientProps {
+  // 如果有需要从服务端获取的初始数据，可以在这里定义
+  initialData?: any;
+}
+
+export function DashboardClient({ initialData }: DashboardClientProps) {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { toast } = useToast();
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [statistics, setStatistics] = useState<any>({
+    totalOrders: 0,
+    inProduction: 0,
+    pendingShipment: 0,
+    completed: 0
+  });
   const [isLoading, setIsLoading] = useState(true);
 
+  // 初始化统计数据
   useEffect(() => {
-    // 如果会话加载完成且未认证，重定向到登录页
-    if (status === "unauthenticated") {
-      console.log("Dashboard Client: 未检测到会话，重定向到登录页");
-      router.push("/login");
-    } else if (status === "authenticated") {
-      // 加载完成，允许显示内容
+    if (initialData) {
+      setStatistics(initialData);
       setIsLoading(false);
     }
-  }, [status, router]);
+  }, [initialData]);
 
-  // 处理加载状态
-  if (status === "loading" || isLoading) {
-    return <div className="p-8 text-center">正在验证身份...</div>;
-  }
+  // 获取提醒数据
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const response = await fetch('/api/alerts');
+        if (response.ok) {
+          const data = await response.json();
+          setAlerts(data);
+        } else {
+          console.error('获取提醒失败');
+        }
+      } catch (error) {
+        console.error('获取提醒出错:', error);
+      }
+    };
 
-  // 如果会话未加载完成或未认证，显示空内容等待重定向
-  if (!session?.user) {
-    return null;
-  }
+    fetchAlerts();
+    
+    if (!initialData) {
+      const fetchStatistics = async () => {
+        try {
+          // 这里实际项目中应当有一个专门的API获取统计数据
+          // 这里仅作示例
+          setStatistics({
+            totalOrders: 124,
+            inProduction: 38,
+            pendingShipment: 27,
+            completed: 76
+          });
+        } catch (error) {
+          console.error('获取统计数据出错:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      fetchStatistics();
+    }
+  }, [initialData]);
+
+  // 处理关闭提醒
+  const handleDismissAlert = (id: string) => {
+    setAlerts(alerts.filter(alert => alert.id !== id));
+    toast({
+      title: "提醒已关闭",
+      description: "该提醒已从列表中移除",
+    });
+  };
+
+  // 处理已读提醒
+  const handleMarkAlertRead = async (id: string) => {
+    try {
+      // 实际应用中应当有一个API来标记已读
+      // 这里仅作示例
+      const updatedAlerts = alerts.map(alert => 
+        alert.id === id ? { ...alert, isNew: false } : alert
+      );
+      setAlerts(updatedAlerts);
+    } catch (error) {
+      console.error('标记已读失败:', error);
+    }
+  };
+
+  // 处理查看所有提醒
+  const handleViewAllAlerts = () => {
+    router.push('/dashboard/notifications');
+  };
 
   return (
-    <div className="space-y-6">
-      <Heading
-        title="欢迎使用安钢球墨铸铁管订单管理系统"
-        description={`你好，${session.user.name || session.user.email}，请从左侧菜单选择功能。`}
-      />
+    <div className="flex-1 space-y-4 p-4 pt-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight">仪表盘</h2>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => router.refresh()}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            刷新
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {isLoading ? (
+          <>
+            <Skeleton className="h-[120px] w-full" />
+            <Skeleton className="h-[120px] w-full" />
+            <Skeleton className="h-[120px] w-full" />
+            <Skeleton className="h-[120px] w-full" />
+          </>
+        ) : (
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">总订单数</CardTitle>
+                <FileBarChart className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{statistics.totalOrders}</div>
+                <p className="text-xs text-muted-foreground">
+                  包含所有状态的订单
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">生产中</CardTitle>
+                <Factory className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{statistics.inProduction}</div>
+                <p className="text-xs text-muted-foreground">
+                  当前正在生产的订单
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">待发运</CardTitle>
+                <TruckIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{statistics.pendingShipment}</div>
+                <p className="text-xs text-muted-foreground">
+                  待发运或部分发运
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">已完成</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{statistics.completed}</div>
+                <p className="text-xs text-muted-foreground">
+                  已完成的订单
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="lg:col-span-5">
+          <CardHeader>
+            <CardTitle>订单趋势</CardTitle>
+            <CardDescription>
+              近期订单创建和完成情况
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pl-2">
+            {isLoading ? (
+              <Skeleton className="h-[300px] w-full" />
+            ) : (
+              <Overview />
+            )}
+          </CardContent>
+        </Card>
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
+        <div className="lg:col-span-2">
+          {isLoading ? (
+            <Skeleton className="h-[450px] w-full" />
+          ) : (
+            <SmartAlert 
+              alerts={alerts} 
+              onDismiss={handleDismissAlert}
+              onMarkRead={handleMarkAlertRead}
+              onViewAll={handleViewAllAlerts}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>订单管理</CardTitle>
-            <CardDescription>管理所有客户订单</CardDescription>
+            <CardTitle>近期订单</CardTitle>
+            <CardDescription>
+              最近创建和更新的订单
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/dashboard/orders">
-              <Button>查看订单</Button>
-            </Link>
+            {isLoading ? (
+              <Skeleton className="h-[300px] w-full" />
+            ) : (
+              <RecentOrders />
+            )}
           </CardContent>
         </Card>
-        
         <Card>
           <CardHeader>
-            <CardTitle>生产管理</CardTitle>
-            <CardDescription>管理生产计划与进度</CardDescription>
+            <CardTitle>待交货订单</CardTitle>
+            <CardDescription>
+              未来7天内需要交付的订单
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Link href="/dashboard/production">
-              <Button>查看生产</Button>
-            </Link>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>发货管理</CardTitle>
-            <CardDescription>管理订单发货与物流</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/dashboard/shipping">
-              <Button>查看发货</Button>
-            </Link>
+          <CardContent className="pl-2">
+            {isLoading ? (
+              <Skeleton className="h-[300px] w-full" />
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center border-b pb-2">
+                  <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <div className="grid flex-1 grid-cols-2 gap-1">
+                    <div className="text-sm font-medium">日期</div>
+                    <div className="text-sm font-medium text-right">订单数</div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">今天</div>
+                      <div className="text-sm font-medium text-right">5</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">明天</div>
+                      <div className="text-sm font-medium text-right">3</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">2天后</div>
+                      <div className="text-sm font-medium text-right">7</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">3天后</div>
+                      <div className="text-sm font-medium text-right">4</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">4天后</div>
+                      <div className="text-sm font-medium text-right">6</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">5天后</div>
+                      <div className="text-sm font-medium text-right">2</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <div className="grid flex-1 grid-cols-2 gap-1">
+                      <div className="text-sm">6天后</div>
+                      <div className="text-sm font-medium text-right">3</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2">
+                  <Button variant="outline" size="sm" className="w-full" asChild>
+                    <a href="/dashboard/orders?view=calendar">查看日历视图</a>
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

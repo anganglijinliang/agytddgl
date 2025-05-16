@@ -31,6 +31,9 @@ import { cn, formatDate } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { subOrderSchema } from "@/lib/request-schema";
 import { createSubOrder, getDropdownData } from "../actions";
+import { Label as UILabel } from "@/components/ui/label";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ProductionLineType, PriorityLevel } from "@prisma/client";
 
 interface SubOrderFormProps {
   orderId: string;
@@ -40,6 +43,22 @@ type DropdownOption = {
   id: string;
   value: string;
 };
+
+// 优先级选项
+const priorityOptions = [
+  { value: PriorityLevel.LOW, label: "低" },
+  { value: PriorityLevel.NORMAL, label: "正常" },
+  { value: PriorityLevel.HIGH, label: "高" },
+  { value: PriorityLevel.URGENT, label: "紧急" },
+  { value: PriorityLevel.CRITICAL, label: "关键" },
+];
+
+// 产线选项
+const productionLineOptions = [
+  { value: ProductionLineType.WORKSHOP_ONE, label: "一车间" },
+  { value: ProductionLineType.WORKSHOP_TWO, label: "二车间" },
+  { value: ProductionLineType.WORKSHOP_THREE, label: "三车间" },
+];
 
 export function SubOrderForm({ orderId }: SubOrderFormProps) {
   const router = useRouter();
@@ -175,24 +194,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>规格</FormLabel>
-                      <Select
-                        disabled={isLoading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="选择规格" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {dropdownData.specifications.map((spec) => (
-                            <SelectItem key={spec.id} value={spec.value}>
-                              {spec.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            {field.value ? field.value : "选择规格..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0" align="start" side="bottom">
+                          <Command>
+                            <CommandInput placeholder="搜索规格..." />
+                            <CommandList>
+                              <CommandEmpty>未找到规格</CommandEmpty>
+                              <CommandGroup>
+                                {dropdownData.specifications.map((spec) => (
+                                  <CommandItem
+                                    key={spec.id}
+                                    value={spec.value}
+                                    onSelect={() => field.onChange(spec.value)}
+                                  >
+                                    {spec.value}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -204,24 +235,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>级别</FormLabel>
-                      <Select
-                        disabled={isLoading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="选择级别" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {dropdownData.grades.map((grade) => (
-                            <SelectItem key={grade.id} value={grade.value}>
-                              {grade.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            {field.value ? field.value : "选择级别..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0" align="start" side="bottom">
+                          <Command>
+                            <CommandInput placeholder="搜索级别..." />
+                            <CommandList>
+                              <CommandEmpty>未找到级别</CommandEmpty>
+                              <CommandGroup>
+                                {dropdownData.grades.map((grade) => (
+                                  <CommandItem
+                                    key={grade.id}
+                                    value={grade.value}
+                                    onSelect={() => field.onChange(grade.value)}
+                                  >
+                                    {grade.value}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -233,24 +276,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>接口形式</FormLabel>
-                      <Select
-                        disabled={isLoading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="选择接口形式" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {dropdownData.interfaceTypes.map((type) => (
-                            <SelectItem key={type.id} value={type.value}>
-                              {type.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            {field.value ? field.value : "选择接口形式..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0" align="start" side="bottom">
+                          <Command>
+                            <CommandInput placeholder="搜索接口形式..." />
+                            <CommandList>
+                              <CommandEmpty>未找到接口形式</CommandEmpty>
+                              <CommandGroup>
+                                {dropdownData.interfaceTypes.map((type) => (
+                                  <CommandItem
+                                    key={type.id}
+                                    value={type.value}
+                                    onSelect={() => field.onChange(type.value)}
+                                  >
+                                    {type.value}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -262,24 +317,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>内衬</FormLabel>
-                      <Select
-                        disabled={isLoading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="选择内衬" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {dropdownData.linings.map((lining) => (
-                            <SelectItem key={lining.id} value={lining.value}>
-                              {lining.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            {field.value ? field.value : "选择内衬..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0" align="start" side="bottom">
+                          <Command>
+                            <CommandInput placeholder="搜索内衬..." />
+                            <CommandList>
+                              <CommandEmpty>未找到内衬</CommandEmpty>
+                              <CommandGroup>
+                                {dropdownData.linings.map((lining) => (
+                                  <CommandItem
+                                    key={lining.id}
+                                    value={lining.value}
+                                    onSelect={() => field.onChange(lining.value)}
+                                  >
+                                    {lining.value}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -291,24 +358,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>长度</FormLabel>
-                      <Select
-                        disabled={isLoading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="选择长度" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {dropdownData.lengths.map((length) => (
-                            <SelectItem key={length.id} value={length.value}>
-                              {length.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            {field.value ? field.value : "选择长度..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0" align="start" side="bottom">
+                          <Command>
+                            <CommandInput placeholder="搜索长度..." />
+                            <CommandList>
+                              <CommandEmpty>未找到长度</CommandEmpty>
+                              <CommandGroup>
+                                {dropdownData.lengths.map((length) => (
+                                  <CommandItem
+                                    key={length.id}
+                                    value={length.value}
+                                    onSelect={() => field.onChange(length.value)}
+                                  >
+                                    {length.value}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -320,24 +399,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>防腐</FormLabel>
-                      <Select
-                        disabled={isLoading}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="选择防腐" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {dropdownData.anticorrosions.map((anti) => (
-                            <SelectItem key={anti.id} value={anti.value}>
-                              {anti.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                          >
+                            {field.value ? field.value : "选择防腐措施..."}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="p-0" align="start" side="bottom">
+                          <Command>
+                            <CommandInput placeholder="搜索防腐措施..." />
+                            <CommandList>
+                              <CommandEmpty>未找到防腐措施</CommandEmpty>
+                              <CommandGroup>
+                                {dropdownData.anticorrosions.map((anti) => (
+                                  <CommandItem
+                                    key={anti.id}
+                                    value={anti.value}
+                                    onSelect={() => field.onChange(anti.value)}
+                                  >
+                                    {anti.value}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -390,22 +481,20 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                       <FormLabel>交货日期</FormLabel>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                formatDate(field.value)
-                              ) : (
-                                <span>选择日期</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              formatDate(field.value)
+                            ) : (
+                              <span>选择日期</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
@@ -442,9 +531,11 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="NORMAL">正常</SelectItem>
-                          <SelectItem value="URGENT">紧急</SelectItem>
-                          <SelectItem value="CRITICAL">特急</SelectItem>
+                          {priorityOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />

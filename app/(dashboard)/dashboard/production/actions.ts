@@ -7,6 +7,10 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ProductionStatus, ShiftType, TeamType } from "@prisma/client";
 import { z } from "zod";
+import { ProductionFormValues } from "./components/production-form";
+import { OrderStatus } from "@prisma/client";
+import { getCurrentUser } from "@/lib/session";
+import { createAuditLog } from "@/lib/create-audit-log";
 
 // 获取所有生产记录
 export async function getProductions(): Promise<ProductionWithDetails[]> {
@@ -78,24 +82,19 @@ const productionFormSchema = z.object({
 export type ProductionFormValues = z.infer<typeof productionFormSchema>;
 
 // 创建生产记录
-export async function createProduction(values: ProductionFormValues) {
+export async function createProduction(data: ProductionFormValues) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      redirect("/login");
+    // 获取当前用户
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, message: "未授权操作" };
     }
 
-    const result = productionFormSchema.safeParse(values);
-    
-    if (!result.success) {
-      return { error: "表单数据验证失败" };
-    }
-
-    // 获取子订单信息
+    // 获取子订单详情
     const subOrder = await db.subOrder.findUnique({
-      where: { id: values.subOrderId },
+      where: {
+        id: data.subOrderId,
+      },
       include: {
         order: true,
         production: true,
@@ -103,102 +102,69 @@ export async function createProduction(values: ProductionFormValues) {
     });
 
     if (!subOrder) {
-      return { error: "订单项目不存在" };
+      return { success: false, message: "无效的子订单ID" };
     }
 
-    // 计算已生产数量
-    const existingProduction = subOrder.production || [];
-    const totalProduced = existingProduction.reduce((sum, p) => sum + p.quantity, 0);
-    const remainingQuantity = subOrder.plannedQuantity - totalProduced;
+    // 判断生产数量是否合理
+    const producedQuantity = subOrder.production.reduce(
+      (sum, prod) => sum + prod.quantity,
+      0
+    );
+    const remainingQuantity = subOrder.plannedQuantity - producedQuantity;
 
-    if (values.quantity > remainingQuantity) {
-      return { error: `生产数量超过计划数量，剩余可生产: ${remainingQuantity}` };
-    }
-
-    // 状态映射 - 将前端状态映射为数据库有效的状态
-    let dbStatus;
-    if (values.status === "COMPLETED") {
-      dbStatus = "FINISHED";
-    } else if (values.status === "PAUSED") {
-      dbStatus = "NOT_STARTED"; // 或其他合适的值
-    } else {
-      dbStatus = values.status; // NOT_STARTED 或 IN_PROGRESS 不需要映射
+    if (data.quantity > remainingQuantity) {
+      return {
+        success: false,
+        message: `生产支数不能超过剩余计划支数 ${remainingQuantity}`,
+      };
     }
 
     // 创建生产记录
-    await db.production.create({
+    const production = await db.production.create({
       data: {
-        status: dbStatus as ProductionStatus,
-        team: values.team,
-        shift: values.shift,
-        quantity: values.quantity,
-        startTime: values.startTime ? new Date(values.startTime) : null,
-        endTime: values.endTime ? new Date(values.endTime) : null,
-        notes: values.notes,
-        userId,
-        subOrderId: values.subOrderId,
-        productionLineId: subOrder.productionLineId || "",
-        productionDate: new Date(),
+        subOrderId: data.subOrderId,
+        productionLineId: data.productionLineId,
+        userId: user.id,
+        team: data.team,
+        shift: data.shift,
+        productionDate: data.productionDate,
+        quantity: data.quantity,
+        status: ProductionStatus.FINISHED,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        qualityNotes: data.qualityNotes,
+        materialUsage: data.materialUsage,
+        notes: data.notes,
       },
     });
 
-    // 检查是否需要更新订单状态
-    const newTotalProduced = totalProduced + values.quantity;
-    if (newTotalProduced >= subOrder.plannedQuantity) {
-      // 如果生产完成，更新子订单的状态
-      // 获取所有子订单的状态来决定主订单的状态
-      const allSubOrders = await db.subOrder.findMany({
-        where: { orderId: subOrder.orderId },
-        include: { production: true },
-      });
-      
-      let allCompleted = true;
-      for (const so of allSubOrders) {
-        const soProduction = so.production || [];
-        const soTotalProduced = soProduction.reduce((sum, p) => sum + p.quantity, 0);
-        if (soTotalProduced < so.plannedQuantity) {
-          allCompleted = false;
-          break;
-        }
-      }
-      
-      if (allCompleted) {
-        // 如果所有子订单都已完成生产，更新主订单状态
-        await db.order.update({
-          where: { id: subOrder.orderId },
-          data: { status: "COMPLETED" },
-        });
-      } else if (subOrder.order.status !== "IN_PRODUCTION") {
-        // 至少有一个子订单在生产中
-        await db.order.update({
-          where: { id: subOrder.orderId },
-          data: { status: "IN_PRODUCTION" },
-        });
-      }
-    } else if (subOrder.order.status === "CONFIRMED") {
-      // 开始生产时，将订单状态更新为生产中
-      await db.order.update({
-        where: { id: subOrder.orderId },
-        data: { status: "IN_PRODUCTION" },
-      });
-    }
+    // 更新子订单状态
+    const updatedProducedQuantity = producedQuantity + data.quantity;
+    const isCompleted = updatedProducedQuantity >= subOrder.plannedQuantity;
+
+    // 检查整个订单的状态
+    await updateOrderStatus(subOrder.orderId);
 
     // 记录审计日志
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "CREATE",
-        resource: "PRODUCTION",
-        resourceId: subOrder.id,
-        description: `创建了订单 ${subOrder.order.orderNumber} 的生产记录，数量: ${values.quantity}`,
-      },
+    await createAuditLog({
+      action: "CREATE",
+      resource: "PRODUCTION",
+      resourceId: production.id,
+      description: `创建了生产记录: ${subOrder.specification}/${subOrder.grade}, 数量: ${data.quantity}`,
+      metadata: JSON.stringify(production),
     });
 
     revalidatePath("/dashboard/production");
-    return { success: true };
+    revalidatePath("/dashboard/orders");
+    revalidatePath(`/dashboard/orders/${subOrder.orderId}`);
+
+    return { success: true, data: production };
   } catch (error) {
     console.error("创建生产记录失败:", error);
-    return { error: "创建生产记录失败" };
+    return {
+      success: false,
+      message: "创建生产记录失败，请重试",
+    };
   }
 }
 
@@ -384,5 +350,213 @@ export async function getDropdownData() {
   } catch (error) {
     console.error("获取下拉选项数据失败:", error);
     throw new Error("获取下拉选项数据失败");
+  }
+}
+
+/**
+ * 更新订单状态
+ */
+export async function updateOrderStatus(orderId: string) {
+  try {
+    // 获取订单及其子订单
+    const order = await db.order.findUnique({
+      where: {
+        id: orderId,
+      },
+      include: {
+        subOrders: {
+          include: {
+            production: true,
+            shipping: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return { success: false, message: "订单不存在" };
+    }
+
+    // 计算生产和发运状态
+    let totalPlannedQuantity = 0;
+    let totalProducedQuantity = 0;
+    let totalShippedQuantity = 0;
+
+    order.subOrders.forEach((subOrder) => {
+      totalPlannedQuantity += subOrder.plannedQuantity;
+
+      subOrder.production.forEach((prod) => {
+        totalProducedQuantity += prod.quantity;
+      });
+
+      subOrder.shipping.forEach((ship) => {
+        totalShippedQuantity += ship.quantity;
+      });
+    });
+
+    // 确定订单状态
+    let newStatus = order.status;
+
+    // 如果订单处于草稿状态，不进行更新
+    if (order.status === OrderStatus.DRAFT) {
+      return { success: true };
+    }
+
+    // 如果有任何生产记录，订单至少是生产中
+    if (totalProducedQuantity > 0 && order.status === OrderStatus.CONFIRMED) {
+      newStatus = OrderStatus.IN_PRODUCTION;
+    }
+
+    // 如果生产完成，并且有部分发运
+    if (
+      totalProducedQuantity >= totalPlannedQuantity &&
+      totalShippedQuantity > 0 &&
+      totalShippedQuantity < totalPlannedQuantity
+    ) {
+      newStatus = OrderStatus.PARTIALLY_SHIPPED;
+    }
+
+    // 如果生产和发运都完成
+    if (
+      totalProducedQuantity >= totalPlannedQuantity &&
+      totalShippedQuantity >= totalPlannedQuantity
+    ) {
+      newStatus = OrderStatus.COMPLETED;
+    }
+
+    // 如果状态发生变化，更新订单
+    if (newStatus !== order.status) {
+      await db.order.update({
+        where: {
+          id: orderId,
+        },
+        data: {
+          status: newStatus,
+        },
+      });
+
+      // 记录订单状态变更日志
+      await createAuditLog({
+        action: "CHANGE_STATUS",
+        resource: "ORDER",
+        resourceId: orderId,
+        description: `订单状态从 ${order.status} 更新为 ${newStatus}`,
+        metadata: JSON.stringify({
+          previousStatus: order.status,
+          newStatus,
+          totalPlannedQuantity,
+          totalProducedQuantity,
+          totalShippedQuantity,
+        }),
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("更新订单状态失败:", error);
+    return { success: false, message: "更新订单状态失败" };
+  }
+}
+
+/**
+ * 获取生产统计数据
+ */
+export async function getProductionStats() {
+  try {
+    // 获取今日生产记录
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayProductions = await db.production.findMany({
+      where: {
+        productionDate: {
+          gte: today,
+        },
+      },
+      include: {
+        subOrder: {
+          select: {
+            specification: true,
+            grade: true,
+          },
+        },
+      },
+    });
+    
+    // 计算今日总产量
+    const todayTotal = todayProductions.reduce(
+      (sum, prod) => sum + prod.quantity,
+      0
+    );
+    
+    // 按班组统计
+    const teamStats = await db.production.groupBy({
+      by: ["team"],
+      _sum: {
+        quantity: true,
+      },
+      where: {
+        productionDate: {
+          gte: new Date(new Date().setDate(today.getDate() - 30)),
+        },
+      },
+    });
+    
+    // 按产线统计
+    const lineStats = await db.production.groupBy({
+      by: ["productionLineId"],
+      _sum: {
+        quantity: true,
+      },
+      where: {
+        productionDate: {
+          gte: new Date(new Date().setDate(today.getDate() - 30)),
+        },
+      },
+    });
+    
+    // 获取产线信息
+    const productionLines = await db.productionLine.findMany({
+      where: {
+        id: {
+          in: lineStats.map((item) => item.productionLineId),
+        },
+      },
+    });
+    
+    // 组合产线统计
+    const lineStatsWithNames = lineStats.map((item) => {
+      const line = productionLines.find((l) => l.id === item.productionLineId);
+      return {
+        productionLineId: item.productionLineId,
+        productionLineName: line?.name || "未知产线",
+        quantity: item._sum.quantity || 0,
+      };
+    });
+    
+    return {
+      todayTotal,
+      todayDetails: todayProductions.map((p) => ({
+        id: p.id,
+        quantity: p.quantity,
+        team: p.team,
+        shift: p.shift,
+        specification: p.subOrder.specification,
+        grade: p.subOrder.grade,
+      })),
+      teamStats: teamStats.map((item) => ({
+        team: item.team,
+        quantity: item._sum.quantity || 0,
+      })),
+      lineStats: lineStatsWithNames,
+    };
+  } catch (error) {
+    console.error("获取生产统计失败:", error);
+    return {
+      todayTotal: 0,
+      todayDetails: [],
+      teamStats: [],
+      lineStats: [],
+    };
   }
 } 
