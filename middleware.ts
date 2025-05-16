@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { verify, JwtPayload } from "jsonwebtoken";
+import { jwtVerify, createRemoteJWKSet } from "jose"; // 使用jose替代jsonwebtoken
 
-// 秘钥
-const SECRET_KEY = process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-development-only";
-
-// 自定义JWT接口
-interface CustomJwtPayload extends JwtPayload {
-  id?: string;
-  name?: string;
-  email?: string;
-  role?: string;
-}
+// 密钥 - 使用Edge兼容的方式
+const getSecretKey = () => {
+  const secret = process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-development-only";
+  return new TextEncoder().encode(secret);
+};
 
 // 中间件函数，处理每个请求
 export async function middleware(req: NextRequest) {
@@ -48,15 +43,27 @@ export async function middleware(req: NextRequest) {
     console.log(`[${requestId}] 未找到NextAuth令牌`);
   }
   
-  // 2. 尝试从自定义Cookie获取令牌
+  // 2. 尝试从自定义Cookie获取令牌 - 使用Edge兼容方式
   console.log(`[${requestId}] 尝试获取自定义令牌...`);
-  let customToken: CustomJwtPayload | null = null;
+  let customUserInfo = null;
   const authCookie = req.cookies.get("auth-token");
   
   if (authCookie?.value) {
     try {
-      customToken = verify(authCookie.value, SECRET_KEY) as CustomJwtPayload;
-      console.log(`[${requestId}] 成功获取自定义令牌，用户: ${customToken.email || 'unknown'}`);
+      // 使用jose库验证JWT，这在Edge Runtime中是支持的
+      const secretKey = await getSecretKey();
+      const { payload } = await jwtVerify(authCookie.value, secretKey, {
+        algorithms: ["HS256"],
+      });
+      
+      customUserInfo = {
+        id: payload.id,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role
+      };
+      
+      console.log(`[${requestId}] 成功获取自定义令牌，用户: ${customUserInfo.email || 'unknown'}`);
     } catch (error) {
       console.error(`[${requestId}] 自定义令牌验证失败:`, error);
     }
@@ -65,15 +72,15 @@ export async function middleware(req: NextRequest) {
   }
   
   // 使用任一有效的令牌
-  const token = nextAuthToken || customToken;
-  const isAuthenticated = !!token;
+  const userInfo = nextAuthToken || customUserInfo;
+  const isAuthenticated = !!userInfo;
 
   console.log(`[${requestId}] 认证状态: ${isAuthenticated ? '已认证' : '未认证'}`);
 
   // 获取角色（不同认证方式可能有不同的字段格式）
-  const role = token ? (
+  const role = userInfo ? (
     nextAuthToken?.role || // NextAuth格式
-    (customToken as CustomJwtPayload)?.role || // 自定义JWT格式
+    customUserInfo?.role || // 自定义JWT格式
     'guest'
   ) : 'guest';
 
@@ -106,7 +113,7 @@ export async function middleware(req: NextRequest) {
       
       // 确保设置正确的响应头，防止缓存
       const redirectResponse = NextResponse.redirect(redirectUrl, {
-        // 使用301重定向，确保浏览器重定向过程正确
+        // 使用302重定向，确保浏览器重定向过程正确
         status: 302,
         headers: {
           "Cache-Control": "no-store, max-age=0",
@@ -153,7 +160,7 @@ export async function middleware(req: NextRequest) {
 
   // 已认证用户，继续请求
   console.log(`[${requestId}] 已认证用户访问受保护路由: ${pathname}，放行请求`);
-  console.log(`[${requestId}] 用户: ${token.email || 'unknown'}, 角色: ${role}`);
+  console.log(`[${requestId}] 用户: ${userInfo.email || 'unknown'}, 角色: ${role}`);
   
   const response = NextResponse.next();
   // 设置更多防缓存响应头

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { compare } from "bcryptjs";
-import { sign } from "jsonwebtoken";
+import { SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { UserRole } from "@prisma/client";
@@ -15,13 +15,16 @@ const TEST_USERS = [
     name: "管理员",
     email: "admin@example.com",
     password: "$2a$10$nKLESvUKFNCcqduxs8qCFOx6JWuaQLoLatOk22qcqZ0Tgp50zkaRW", // 'Admin123!'
-    role: UserRole.ADMIN,
+    role: UserRole.SUPER_ADMIN,
     image: null,
   }
 ];
 
-// 密钥
-const SECRET_KEY = process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-development-only";
+// 密钥 - 使用Edge兼容的方式
+const getSecretKey = () => {
+  const secret = process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-development-only";
+  return new TextEncoder().encode(secret);
+};
 
 // 处理GET请求
 export async function GET() {
@@ -160,20 +163,24 @@ export async function POST(request: Request) {
       }, { status: 500 });
     }
     
-    // 创建JWT令牌
+    // 创建JWT令牌 - 使用Edge兼容的方式
     const tokenPayload = { 
       id: user.id, 
       email: user.email,
       name: user.name,
-      role: user.role,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24) // 24小时有效期
+      role: user.role
     };
     
     console.log(`[${requestId}] 创建JWT令牌, 用户ID: ${user.id}, 角色: ${user.role}`);
     
     try {
-      const token = sign(tokenPayload, SECRET_KEY);
+      // 使用jose库创建JWT Token
+      const secretKey = await getSecretKey();
+      const token = await new SignJWT(tokenPayload)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('24h') // 24小时有效期
+        .sign(secretKey);
       
       // 创建响应对象
       const response = NextResponse.json({
