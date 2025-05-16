@@ -65,7 +65,7 @@ async function generateAlerts(user: { id: string, role: string }) {
             notification.type === "WARNING" ? "warning" : "info",
       title: notification.title,
       description: notification.message,
-      link: notification.link || undefined,
+      link: notification.linkUrl || undefined,
       date: notification.createdAt,
       priority: notification.type === "URGENT" ? 100 : 
                notification.type === "WARNING" ? 80 : 60,
