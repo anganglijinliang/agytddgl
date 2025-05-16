@@ -11,6 +11,7 @@
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:reset-migrations": "node scripts/reset-migrations.js",
     "postinstall": "prisma generate",
     "vercel-build": "node scripts/vercel-deploy.js && next build",
     "create-test-user": "ts-node --transpile-only scripts/create-test-user.ts",

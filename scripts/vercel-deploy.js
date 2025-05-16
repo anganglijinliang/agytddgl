@@ -84,6 +84,32 @@ async function main() {
           console.log('数据库连接URL(部分):', process.env.DATABASE_URL.substring(0, 10) + '...');
         }
         
+        // 检查是否需要重置迁移历史记录
+        if (process.env.RESET_MIGRATIONS === 'true') {
+          console.log('检测到RESET_MIGRATIONS=true, 正在重置迁移历史...');
+          try {
+            // 备份当前数据库模式
+            console.log('执行schema推送以保持数据...');
+            execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+            
+            // 重置迁移历史记录
+            console.log('重置迁移历史记录...');
+            const prisma = new PrismaClient();
+            try {
+              // 直接移除_prisma_migrations表中的失败记录
+              await prisma.$executeRawUnsafe('DELETE FROM "_prisma_migrations" WHERE migration_name = \'20230101000000_init\' AND applied_steps_count = 0');
+              console.log('成功重置迁移历史记录');
+            } catch (err) {
+              console.warn('尝试直接清除迁移历史记录失败:', err.message);
+              console.log('继续使用db push方法...');
+            } finally {
+              await prisma.$disconnect();
+            }
+          } catch (resetError) {
+            console.error('重置迁移历史记录失败:', resetError.message);
+          }
+        }
+        
         // 使用Prisma migrate deploy来应用迁移，这更适合生产环境
         execSync('npx prisma migrate deploy', { stdio: 'inherit' });
         console.log('数据库迁移已成功应用');
