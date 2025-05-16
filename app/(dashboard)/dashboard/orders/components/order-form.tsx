@@ -35,6 +35,22 @@ import { createAuditLog } from "@/lib/create-audit-log";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+// 定义状态选项
+const statusOptions = [
+  { value: "DRAFT", label: "草稿" },
+  { value: "CONFIRMED", label: "已确认" },
+  { value: "IN_PRODUCTION", label: "生产中" },
+  { value: "PARTIALLY_SHIPPED", label: "部分发运" },
+  { value: "COMPLETED", label: "已完成" },
+  { value: "CANCELED", label: "已取消" },
+];
+
+// 定义发运方式选项
+const shippingMethodOptions = [
+  { value: "SELF_DELIVERY", label: "自主发运" },
+  { value: "CUSTOMER_PICKUP", label: "客户自提" },
+];
+
 type Customer = {
   id: string;
   name: string;

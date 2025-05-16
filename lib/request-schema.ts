@@ -43,6 +43,11 @@ export const orderBaseSchema = z.object({
   shippingAddress: z.string().optional(),
   paymentTerms: z.string().optional(),
   notes: z.string().optional(),
+  status: z.enum(['DRAFT', 'CONFIRMED', 'IN_PRODUCTION', 'PARTIALLY_SHIPPED', 'COMPLETED', 'CANCELED'], {
+    required_error: '请选择订单状态'
+  }).default('DRAFT'),
+  totalAmount: z.number().optional(),
+  paymentStatus: z.string().optional(),
 });
 
 // 子订单信息Schema
