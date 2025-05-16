@@ -133,59 +133,57 @@ async function generateAlerts(user: { id: string, role: string }) {
   // 查询临近交期的订单
   // 仅包含有权限查看的角色
   if (["SUPER_ADMIN", "ADMIN", "ORDER_SPECIALIST", "SHIPPING_STAFF"].includes(user.role)) {
-    const deliveryDateOrders = await db.order.findMany({
+    // 修改查询方式，避免使用跨表字段引用
+    const subOrdersWithShipping = await db.subOrder.findMany({
       where: {
-        status: {
-          in: ["CONFIRMED", "IN_PRODUCTION", "PARTIALLY_SHIPPED"],
+        deliveryDate: {
+          lte: addDays(now, 7), // 7天内需要交付的订单
         },
-        subOrders: {
-          some: {
-            deliveryDate: {
-              lte: addDays(now, 7), // 7天内需要交付的订单
-            },
-            // 排除已经完全发运的子订单
-            shipping: {
-              every: {
-                NOT: {
-                  quantity: {
-                    gte: db.subOrder.fields.plannedQuantity,
-                  },
-                },
-              },
-            },
+        order: {
+          status: {
+            in: ["CONFIRMED", "IN_PRODUCTION", "PARTIALLY_SHIPPED"],
           },
         },
       },
       include: {
-        customer: {
-          select: {
-            name: true,
+        order: {
+          include: {
+            customer: true,
           },
         },
-        subOrders: {
-          where: {
-            deliveryDate: {
-              lte: addDays(now, 7),
-            },
-          },
-          select: {
-            id: true,
-            specification: true,
-            plannedQuantity: true,
-            deliveryDate: true,
-            shipping: {
-              select: {
-                quantity: true,
-              },
-            },
-          },
-        },
+        shipping: true,
       },
-      take: 10,
     });
     
+    // 筛选出未完全发货的子订单
+    const incompleteSubOrders = subOrdersWithShipping.filter(subOrder => {
+      const totalShipped = subOrder.shipping.reduce((sum, s) => sum + s.quantity, 0);
+      return totalShipped < subOrder.plannedQuantity;
+    });
+    
+    // 根据订单ID分组
+    const orderMap = new Map<string, {
+      id: string;
+      orderNumber: string;
+      customer: { name: string };
+      subOrders: Array<typeof incompleteSubOrders[0]>;
+    }>();
+    
+    for (const subOrder of incompleteSubOrders) {
+      if (!orderMap.has(subOrder.orderId)) {
+        orderMap.set(subOrder.orderId, {
+          id: subOrder.orderId,
+          orderNumber: subOrder.order.orderNumber,
+          customer: subOrder.order.customer,
+          subOrders: [],
+        });
+      }
+      orderMap.get(subOrder.orderId)?.subOrders.push(subOrder);
+    }
+    
     // 将临近交期订单转换为提醒
-    for (const order of deliveryDateOrders) {
+    // 使用Array.from转换Map.entries()为数组再迭代
+    Array.from(orderMap.entries()).forEach(([orderId, order]) => {
       // 找出最近的交期日期
       let earliestDate = new Date();
       earliestDate.setFullYear(earliestDate.getFullYear() + 1); // 设置一个将来的日期
@@ -197,9 +195,9 @@ async function generateAlerts(user: { id: string, role: string }) {
       }
       
       // 计算未完成数量
-      const total = order.subOrders.reduce((sum, so) => sum + so.plannedQuantity, 0);
-      const shipped = order.subOrders.reduce((sum, so) => {
-        return sum + so.shipping.reduce((shipSum, s) => shipSum + s.quantity, 0);
+      const total = order.subOrders.reduce((sum: number, so) => sum + so.plannedQuantity, 0);
+      const shipped = order.subOrders.reduce((sum: number, so) => {
+        return sum + so.shipping.reduce((shipSum: number, s) => shipSum + s.quantity, 0);
       }, 0);
       const remaining = total - shipped;
       
@@ -217,38 +215,30 @@ async function generateAlerts(user: { id: string, role: string }) {
       }
       
       alerts.push({
-        id: `deadline-order-${order.id}`,
+        id: `deadline-order-${orderId}`,
         type: alertType,
         title: `交期临近: ${order.orderNumber}`,
         description: `客户 ${order.customer.name} 的订单还有 ${daysUntilDelivery} 天到期，还剩 ${remaining} 支未发运`,
-        link: `/dashboard/orders/${order.id}`,
+        link: `/dashboard/orders/${orderId}`,
         date: earliestDate,
         priority,
         isNew: false,
       });
-    }
+    });
   }
   
   // 查询生产延误信息
   // 仅包含有权限查看的角色
   if (["SUPER_ADMIN", "ADMIN", "PRODUCTION_STAFF"].includes(user.role)) {
-    const delayedProductions = await db.subOrder.findMany({
+    // 修改查询方式，避免字段引用和进度计算问题
+    const subOrdersWithProduction = await db.subOrder.findMany({
       where: {
-        order: {
-          status: {
-            in: ["CONFIRMED", "IN_PRODUCTION"],
-          },
-        },
-        // 查找交期临近但生产进度不足的子订单
         deliveryDate: {
           lte: addDays(now, 10), // 10天内需要交付
         },
-        production: {
-          // 检查生产进度
-          _sum: {
-            quantity: {
-              lt: 0.5, // 生产进度不足50%
-            },
+        order: {
+          status: {
+            in: ["CONFIRMED", "IN_PRODUCTION"],
           },
         },
       },
@@ -273,10 +263,17 @@ async function generateAlerts(user: { id: string, role: string }) {
       take: 10,
     });
     
+    // 筛选出生产进度不足的子订单
+    const delayedProductions = subOrdersWithProduction.filter(subOrder => {
+      const totalProduced = subOrder.production.reduce((sum: number, p) => sum + p.quantity, 0);
+      const productionPercentage = (totalProduced / subOrder.plannedQuantity) * 100;
+      return productionPercentage < 50; // 生产进度不足50%
+    });
+    
     // 将生产延误转换为提醒
     for (const subOrder of delayedProductions) {
       // 计算生产进度
-      const produced = subOrder.production.reduce((sum, p) => sum + p.quantity, 0);
+      const produced = subOrder.production.reduce((sum: number, p) => sum + p.quantity, 0);
       const productionPercentage = Math.round((produced / subOrder.plannedQuantity) * 100);
       
       alerts.push({
