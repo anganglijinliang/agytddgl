@@ -51,22 +51,28 @@ export default async function OrderTrackPage({ params }: OrderTrackPageProps) {
           },
         },
       },
-      // 获取审计日志用于显示状态变更历史
-      auditLogs: {
-        where: {
-          action: 'update_status',
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: 5,
-      },
     },
   });
 
   if (!order) {
     notFound();
   }
+
+  // 单独查询与订单相关的审计日志
+  const auditLogs = await db.auditLog.findMany({
+    where: {
+      resource: 'ORDER',
+      resourceId: order.id,
+      action: 'CHANGE_STATUS',
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 5,
+    include: {
+      user: true,
+    },
+  });
 
   // 计算生产和发运进度
   const calculateProgress = () => {
@@ -77,13 +83,17 @@ export default async function OrderTrackPage({ params }: OrderTrackPageProps) {
     order.subOrders.forEach((subOrder) => {
       totalPlannedQuantity += subOrder.plannedQuantity;
       
-      subOrder.production.forEach((prod) => {
-        totalProducedQuantity += prod.quantity;
-      });
+      if (subOrder.production) {
+        subOrder.production.forEach((prod) => {
+          totalProducedQuantity += prod.quantity;
+        });
+      }
       
-      subOrder.shipping.forEach((ship) => {
-        totalShippedQuantity += ship.quantity;
-      });
+      if (subOrder.shipping) {
+        subOrder.shipping.forEach((ship) => {
+          totalShippedQuantity += ship.quantity;
+        });
+      }
     });
 
     const productionProgress = totalPlannedQuantity > 0 
@@ -133,10 +143,12 @@ export default async function OrderTrackPage({ params }: OrderTrackPageProps) {
     let latestShipping = null;
 
     for (const subOrder of order.subOrders) {
-      if (subOrder.production.length > 0 && (!latestProduction || new Date(subOrder.production[0].createdAt) > new Date(latestProduction.createdAt))) {
+      if (subOrder.production && subOrder.production.length > 0 && 
+          (!latestProduction || new Date(subOrder.production[0].createdAt) > new Date(latestProduction.createdAt))) {
         latestProduction = subOrder.production[0];
       }
-      if (subOrder.shipping.length > 0 && (!latestShipping || new Date(subOrder.shipping[0].createdAt) > new Date(latestShipping.createdAt))) {
+      if (subOrder.shipping && subOrder.shipping.length > 0 && 
+          (!latestShipping || new Date(subOrder.shipping[0].createdAt) > new Date(latestShipping.createdAt))) {
         latestShipping = subOrder.shipping[0];
       }
     }
@@ -249,256 +261,245 @@ export default async function OrderTrackPage({ params }: OrderTrackPageProps) {
               <p className="text-base">{formatDate(order.createdAt)}</p>
             </div>
             <div>
-              <p className="text-sm font-medium">最后更新</p>
-              <p className="text-base">{formatDate(order.updatedAt)}</p>
+              <p className="text-sm font-medium">订单状态</p>
+              <Badge variant={getStatusBadgeVariant(order.status)} className="mt-1">
+                {getStatusText(order.status)}
+              </Badge>
             </div>
             <div>
-              <p className="text-sm font-medium">发运方式</p>
-              <p className="text-base">
-                {order.shippingMethod === "SELF_DELIVERY" ? "厂家送货" : "客户自提"}
-              </p>
+              <p className="text-sm font-medium">运输方式</p>
+              <p className="text-base">{order.shippingMethod}</p>
             </div>
             {order.shippingAddress && (
               <div>
-                <p className="text-sm font-medium">发运地址</p>
+                <p className="text-sm font-medium">发货地址</p>
                 <p className="text-base">{order.shippingAddress}</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* 进度统计卡片 */}
+        {/* 进度卡片 */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              进度统计
+              <ArrowRightLeft className="h-5 w-5" />
+              订单进度
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <div>
               <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium">生产进度</span>
-                <span className="text-sm font-medium">{progress.production}%</span>
+                <p className="text-sm font-medium">生产进度</p>
+                <p className="text-sm font-medium">{progress.production}%</p>
               </div>
               <Progress value={progress.production} className="h-2" />
-              <div className="mt-1 text-xs text-muted-foreground">
-                已生产 {progress.totalProducedQuantity} / 计划 {progress.totalPlannedQuantity} 支
-              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                完成: {progress.totalProducedQuantity} / {progress.totalPlannedQuantity} 支
+              </p>
             </div>
 
             <div>
               <div className="flex justify-between mb-2">
-                <span className="text-sm font-medium">发运进度</span>
-                <span className="text-sm font-medium">{progress.shipping}%</span>
+                <p className="text-sm font-medium">发运进度</p>
+                <p className="text-sm font-medium">{progress.shipping}%</p>
               </div>
               <Progress value={progress.shipping} className="h-2" />
-              <div className="mt-1 text-xs text-muted-foreground">
-                已发运 {progress.totalShippedQuantity} / 计划 {progress.totalPlannedQuantity} 支
-              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                发运: {progress.totalShippedQuantity} / {progress.totalPlannedQuantity} 支
+              </p>
             </div>
 
-            {latestProduction && (
-              <div className="pt-2">
-                <p className="text-xs text-muted-foreground">最近生产: {formatDate(latestProduction.createdAt)}</p>
-              </div>
-            )}
-
-            {latestShipping && (
-              <div>
-                <p className="text-xs text-muted-foreground">最近发运: {formatDate(latestShipping.createdAt)}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 订单进度跟踪 */}
-        <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>订单进度跟踪</CardTitle>
-            <CardDescription>
-              跟踪您的订单处理状态
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row justify-between mb-6 gap-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 1 ? 'bg-primary text-white' : 'bg-muted'}`}>
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-medium">订单确认</p>
-                  <p className="text-sm text-muted-foreground">
-                    {orderStage >= 2 ? formatDate(order.updatedAt) : '等待中'}
-                  </p>
-                </div>
-              </div>
-              <div className="hidden sm:block w-full h-0.5 self-center bg-border"></div>
-              <div className="flex items-center gap-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 3 ? 'bg-primary text-white' : 'bg-muted'}`}>
-                  <Factory className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-medium">生产中</p>
-                  <p className="text-sm text-muted-foreground">
-                    {orderStage >= 3 ? '进行中' : '未开始'}
-                  </p>
-                </div>
-              </div>
-              <div className="hidden sm:block w-full h-0.5 self-center bg-border"></div>
-              <div className="flex items-center gap-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 4 ? 'bg-primary text-white' : 'bg-muted'}`}>
-                  <Truck className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-medium">发运中</p>
-                  <p className="text-sm text-muted-foreground">
-                    {orderStage >= 4 ? '进行中' : '未开始'}
-                  </p>
-                </div>
-              </div>
-              <div className="hidden sm:block w-full h-0.5 self-center bg-border"></div>
-              <div className="flex items-center gap-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 5 ? 'bg-primary text-white' : 'bg-muted'}`}>
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-medium">已完成</p>
-                  <p className="text-sm text-muted-foreground">
-                    {orderStage >= 5 ? formatDate(order.updatedAt) : '等待中'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 状态变更历史 */}
-            {order.auditLogs && order.auditLogs.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-lg font-medium mb-2 flex items-center gap-2">
-                  <ArrowRightLeft className="h-4 w-4" />
-                  状态变更历史
-                </h3>
-                <div className="space-y-2">
-                  {order.auditLogs.map((log) => (
-                    <div key={log.id} className="text-sm border-l-2 border-primary pl-3 py-1">
-                      <p className="font-medium">{log.description}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(log.createdAt)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 订单详情 */}
-        <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>订单详情</CardTitle>
-            <CardDescription>
-              球墨铸铁管订单规格信息
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {order.subOrders.map((subOrder, index) => (
-                <div key={subOrder.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold text-lg">子订单 {index + 1}</h3>
-                    <div className="flex gap-2 items-center">
-                      <p className="text-sm">交货日期: {formatDate(subOrder.deliveryDate)}</p>
-                      <Badge variant={subOrder.priorityLevel === "URGENT" || subOrder.priorityLevel === "CRITICAL" ? "destructive" : "outline"}>
-                        {subOrder.priorityLevel === "LOW" && "低优先级"}
-                        {subOrder.priorityLevel === "NORMAL" && "普通优先级"}
-                        {subOrder.priorityLevel === "HIGH" && "高优先级"}
-                        {subOrder.priorityLevel === "URGENT" && "紧急"}
-                        {subOrder.priorityLevel === "CRITICAL" && "特急"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div>
-                      <p className="text-sm font-medium">规格</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.specification}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">级别</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.grade}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">接口形式</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.interfaceType}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">内衬</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.lining}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">长度</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.length}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">防腐措施</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.anticorrosion}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">计划支数</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.plannedQuantity} 支</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">单重</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.unitWeight} kg</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">总重</p>
-                      <p className="text-sm text-muted-foreground">{subOrder.totalWeight} kg</p>
-                    </div>
-                  </div>
-
-                  {/* 生产和发运记录 */}
-                  {(subOrder.production.length > 0 || subOrder.shipping.length > 0) && (
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {subOrder.production.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-medium mb-2">最近生产记录</h4>
-                            <div className="text-xs space-y-1">
-                              {subOrder.production.slice(0, 3).map((prod) => (
-                                <div key={prod.id} className="flex justify-between">
-                                  <span>{formatDate(prod.productionDate)}</span>
-                                  <span>{prod.quantity} 支</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {subOrder.shipping.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-medium mb-2">最近发运记录</h4>
-                            <div className="text-xs space-y-1">
-                              {subOrder.shipping.slice(0, 3).map((ship) => (
-                                <div key={ship.id} className="flex justify-between">
-                                  <span>{formatDate(ship.shippingDate)}</span>
-                                  <span>{ship.quantity} 支</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="pt-2">
+              <Link href={`/dashboard/orders/${order.id}`} passHref>
+                <Button variant="outline" size="sm" className="w-full">
+                  查看详情
+                </Button>
+              </Link>
             </div>
           </CardContent>
-          <CardFooter className="justify-center">
-            <Button variant="outline" asChild>
-              <Link href={`/`}>返回首页</Link>
-            </Button>
-          </CardFooter>
         </Card>
       </div>
+
+      {/* 订单跟踪时间线 */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5" />
+            订单处理流程
+          </CardTitle>
+          <CardDescription>
+            追踪您的订单从确认到完成的每个阶段
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="relative">
+            {/* 时间线轴 */}
+            <div className="absolute left-4 top-0 h-full w-px bg-border"></div>
+
+            <div className="space-y-8 relative">
+              {/* 订单确认 */}
+              <div className="relative pl-10">
+                <div className={cn(
+                  "absolute left-0 top-1 h-8 w-8 rounded-full border flex items-center justify-center",
+                  orderStage >= 2 ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border text-muted-foreground"
+                )}>
+                  {orderStage >= 2 ? <CheckCircle2 className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+                </div>
+                <h3 className="text-lg font-semibold">订单确认</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {orderStage >= 2 ? "订单已确认，准备进入生产阶段" : "订单尚未确认"}
+                </p>
+                {orderStage >= 2 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    确认时间: {formatDate(order.updatedAt)}
+                  </p>
+                )}
+              </div>
+
+              {/* 生产阶段 */}
+              <div className="relative pl-10">
+                <div className={cn(
+                  "absolute left-0 top-1 h-8 w-8 rounded-full border flex items-center justify-center",
+                  orderStage >= 3 ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border text-muted-foreground"
+                )}>
+                  {orderStage >= 3 ? <CheckCircle2 className="h-5 w-5" /> : <Factory className="h-5 w-5" />}
+                </div>
+                <h3 className="text-lg font-semibold">生产阶段</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {orderStage >= 3 ? "订单已进入生产阶段" : "订单尚未进入生产阶段"}
+                </p>
+                {latestProduction && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    最近生产: {formatDate(latestProduction.createdAt)}，数量: {latestProduction.quantity} 支
+                  </p>
+                )}
+                <div className="mt-3">
+                  <div className="flex justify-between mb-1">
+                    <p className="text-xs font-medium">生产进度</p>
+                    <p className="text-xs font-medium">{progress.production}%</p>
+                  </div>
+                  <Progress value={progress.production} className="h-1.5" />
+                </div>
+              </div>
+
+              {/* 发货阶段 */}
+              <div className="relative pl-10">
+                <div className={cn(
+                  "absolute left-0 top-1 h-8 w-8 rounded-full border flex items-center justify-center",
+                  orderStage >= 4 ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border text-muted-foreground"
+                )}>
+                  {orderStage >= 4 ? <CheckCircle2 className="h-5 w-5" /> : <Truck className="h-5 w-5" />}
+                </div>
+                <h3 className="text-lg font-semibold">发货阶段</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {orderStage >= 4 ? "订单已开始发货" : "订单尚未开始发货"}
+                </p>
+                {latestShipping && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    最近发货: {formatDate(latestShipping.createdAt)}，数量: {latestShipping.quantity} 支
+                  </p>
+                )}
+                <div className="mt-3">
+                  <div className="flex justify-between mb-1">
+                    <p className="text-xs font-medium">发货进度</p>
+                    <p className="text-xs font-medium">{progress.shipping}%</p>
+                  </div>
+                  <Progress value={progress.shipping} className="h-1.5" />
+                </div>
+              </div>
+
+              {/* 完成 */}
+              <div className="relative pl-10">
+                <div className={cn(
+                  "absolute left-0 top-1 h-8 w-8 rounded-full border flex items-center justify-center",
+                  orderStage >= 5 ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border text-muted-foreground"
+                )}>
+                  {orderStage >= 5 ? <CheckCircle2 className="h-5 w-5" /> : <PackageCheck className="h-5 w-5" />}
+                </div>
+                <h3 className="text-lg font-semibold">订单完成</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {orderStage >= 5 ? "订单已全部完成发货" : "订单尚未完成"}
+                </p>
+                {orderStage >= 5 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    完成时间: {formatDate(order.updatedAt)}
+                  </p>
+                )}
+              </div>
+
+              {/* 状态变更历史 */}
+              {auditLogs && auditLogs.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium mb-2 flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5" />
+                    状态变更历史
+                  </h3>
+                  <div className="space-y-2">
+                    {auditLogs.map((log) => (
+                      <div key={log.id} className="text-sm border-l-2 border-primary pl-3 py-1">
+                        <p className="font-medium">{log.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(log.createdAt)} {log.user?.name && `- ${log.user.name}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 规格明细 */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>规格明细</CardTitle>
+          <CardDescription>订单包含的管材规格明细</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-3 px-4 font-medium">规格</th>
+                  <th className="text-left py-3 px-4 font-medium">等级</th>
+                  <th className="text-left py-3 px-4 font-medium">连接方式</th>
+                  <th className="text-left py-3 px-4 font-medium">内衬</th>
+                  <th className="text-left py-3 px-4 font-medium">长度</th>
+                  <th className="text-right py-3 px-4 font-medium">数量</th>
+                  <th className="text-right py-3 px-4 font-medium">已生产</th>
+                  <th className="text-right py-3 px-4 font-medium">已发运</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.subOrders.map((subOrder) => {
+                  const producedQuantity = subOrder.production
+                    ? subOrder.production.reduce((sum, prod) => sum + prod.quantity, 0)
+                    : 0;
+                  const shippedQuantity = subOrder.shipping
+                    ? subOrder.shipping.reduce((sum, ship) => sum + ship.quantity, 0)
+                    : 0;
+                  
+                  return (
+                    <tr key={subOrder.id} className="border-b">
+                      <td className="py-3 px-4">{subOrder.specification}</td>
+                      <td className="py-3 px-4">{subOrder.grade}</td>
+                      <td className="py-3 px-4">{subOrder.interfaceType}</td>
+                      <td className="py-3 px-4">{subOrder.lining}</td>
+                      <td className="py-3 px-4">{subOrder.length}</td>
+                      <td className="py-3 px-4 text-right">{subOrder.plannedQuantity}</td>
+                      <td className="py-3 px-4 text-right">{producedQuantity}</td>
+                      <td className="py-3 px-4 text-right">{shippedQuantity}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 } 
