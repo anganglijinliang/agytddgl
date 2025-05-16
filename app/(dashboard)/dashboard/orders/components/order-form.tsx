@@ -32,7 +32,7 @@ import { Order, OrderStatus, ShippingMethod } from "@prisma/client";
 import { createOrder, updateOrder } from "../actions";
 import { SubOrderForm } from "./sub-order-form";
 import { createAuditLog } from "@/lib/create-audit-log";
-import { AlertCircle, LoaderCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type Customer = {
@@ -370,7 +370,7 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
                 <Button disabled={isLoading} type="submit">
                   {isLoading ? (
                     <>
-                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       处理中...
                     </>
                   ) : (
