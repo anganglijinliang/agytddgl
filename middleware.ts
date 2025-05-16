@@ -26,11 +26,11 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/images/") ||
     pathname.includes(".")
   ) {
-    console.log(`[${requestId}] 静态资源请求，跳过中间件: ${pathname}`);
     return NextResponse.next();
   }
   
   console.log(`[${requestId}] 中间件处理请求: ${pathname}`);
+  console.log(`[${requestId}] Cookies: ${req.cookies.toString()}`);
   
   // 1. 尝试从NextAuth获取令牌
   console.log(`[${requestId}] 尝试获取NextAuth令牌...`);
@@ -66,6 +66,8 @@ export async function middleware(req: NextRequest) {
   const token = nextAuthToken || customToken;
   const isAuthenticated = !!token;
 
+  console.log(`[${requestId}] 认证状态: ${isAuthenticated ? '已认证' : '未认证'}`);
+
   // 获取角色（不同认证方式可能有不同的字段格式）
   const role = token ? (
     nextAuthToken?.role || // NextAuth格式
@@ -98,8 +100,14 @@ export async function middleware(req: NextRequest) {
     if (isAuthenticated && (pathname === "/login" || pathname === "/" || pathname === "/simple-login" || pathname === "/test-login")) {
       console.log(`[${requestId}] 已认证用户访问登录页，重定向到dashboard`);
       const redirectUrl = new URL("/dashboard", req.url);
+      
+      // 确保设置正确的响应头，防止缓存
       const redirectResponse = NextResponse.redirect(redirectUrl);
+      redirectResponse.headers.set("Cache-Control", "no-store, max-age=0");
+      redirectResponse.headers.set("Pragma", "no-cache");
+      redirectResponse.headers.set("Expires", "0");
       redirectResponse.headers.set("x-middleware-cache", "no-cache");
+      
       return redirectResponse;
     }
     console.log(`[${requestId}] 放行公开路由: ${pathname}`);
@@ -121,8 +129,15 @@ export async function middleware(req: NextRequest) {
 
   // 已认证用户，继续请求
   console.log(`[${requestId}] 已认证用户访问受保护路由: ${pathname}，放行请求`);
+  console.log(`[${requestId}] 用户: ${token.email || 'unknown'}, 角色: ${role}`);
+  
   const response = NextResponse.next();
+  // 设置更多防缓存响应头
+  response.headers.set("Cache-Control", "no-store, max-age=0");
+  response.headers.set("Pragma", "no-cache");
+  response.headers.set("Expires", "0");
   response.headers.set("x-middleware-cache", "no-cache");
+  
   return response;
 }
 

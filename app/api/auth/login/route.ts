@@ -175,24 +175,8 @@ export async function POST(request: Request) {
     try {
       const token = sign(tokenPayload, SECRET_KEY);
       
-      // 设置Cookie
-      const cookieStore = cookies();
-      cookieStore.set("auth-token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 60 * 60 * 24, // 1天
-        path: "/",
-        sameSite: "lax"
-      });
-      
-      // 添加调试日志
-      console.log(`[${requestId}] Cookie设置成功, Cookie名称: auth-token`);
-      console.log(`[${requestId}] Cookie安全属性: secure=${process.env.NODE_ENV === "production"}, httpOnly=true, maxAge=86400`);
-      
-      // 返回成功响应
-      console.log(`[${requestId}] 登录成功, 用户: ${user.email}, 角色: ${user.role}`);
-      
-      return NextResponse.json({
+      // 创建响应对象
+      const response = NextResponse.json({
         success: true,
         requestId,
         user: {
@@ -202,6 +186,43 @@ export async function POST(request: Request) {
           role: user.role,
         }
       });
+      
+      // 设置多个Cookie来提高兼容性
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24, // 1天
+        path: "/",
+        sameSite: "lax" as const
+      };
+      
+      // 设置主认证Cookie
+      response.cookies.set("auth-token", token, cookieOptions);
+      
+      // 设置NextAuth兼容Cookie
+      response.cookies.set(
+        process.env.NODE_ENV === 'production' 
+          ? '__Secure-next-auth.session-token' 
+          : 'next-auth.session-token',
+        token,
+        cookieOptions
+      );
+      
+      // 设置附加Cookie便于调试
+      response.cookies.set("user-id", user.id, {
+        ...cookieOptions,
+        httpOnly: false // 允许客户端访问
+      });
+      
+      // 添加缓存控制头
+      response.headers.set("Cache-Control", "no-store, max-age=0");
+      response.headers.set("Pragma", "no-cache");
+      
+      // 添加调试日志
+      console.log(`[${requestId}] Cookie设置成功`);
+      console.log(`[${requestId}] 登录成功, 用户: ${user.email}, 角色: ${user.role}`);
+      
+      return response;
     } catch (tokenError) {
       console.error(`[${requestId}] 创建或设置令牌失败:`, tokenError);
       return NextResponse.json({ 

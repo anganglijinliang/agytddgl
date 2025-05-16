@@ -23,6 +23,7 @@ export default function LoginForm({ error }: LoginFormProps) {
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("Admin123!");
   const [loginAttempts, setLoginAttempts] = useState(0);
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // 检查URL中是否有错误信息或者通过props传入的错误
   useEffect(() => {
@@ -38,6 +39,44 @@ export default function LoginForm({ error }: LoginFormProps) {
       setErrorMsg(getErrorMessage(errorFromUrl));
     }
   }, [searchParams, error]);
+
+  // 添加登录成功后的跳转效果
+  useEffect(() => {
+    if (loginSuccess) {
+      // 使用多种方式尝试跳转，提高可靠性
+      const redirectToDashboard = () => {
+        console.log("执行跳转到Dashboard的操作");
+        
+        try {
+          // 方法1: 使用Next.js路由
+          router.refresh();
+          router.replace("/dashboard");
+          
+          // 方法2: 如果500ms后还在同一页面，使用window.location强制跳转
+          setTimeout(() => {
+            if (window.location.pathname.includes("/login")) {
+              console.log("使用window.location强制跳转");
+              window.location.href = "/dashboard";
+            }
+          }, 500);
+          
+          // 方法3: 最后的备份方案，直接重载页面
+          setTimeout(() => {
+            if (window.location.pathname.includes("/login")) {
+              console.log("使用location.reload()重载页面");
+              window.location.reload();
+            }
+          }, 1000);
+        } catch (error) {
+          console.error("所有跳转方法都失败:", error);
+          // 最终备用方案
+          window.location.href = "/dashboard";
+        }
+      };
+      
+      redirectToDashboard();
+    }
+  }, [loginSuccess, router]);
 
   // 获取错误信息
   const getErrorMessage = (errorCode: string) => {
@@ -71,7 +110,8 @@ export default function LoginForm({ error }: LoginFormProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
-        cache: "no-store"
+        cache: "no-store",
+        credentials: "include" // 确保包含Cookie
       });
       
       let data;
@@ -108,22 +148,9 @@ export default function LoginForm({ error }: LoginFormProps) {
       setErrorMsg("");
       setLoginAttempts(0);
       
-      // 延迟跳转
-      setTimeout(() => {
-        // 登录成功后直接跳转到固定路径
-        console.log("登录成功，即将跳转到/dashboard");
-        
-        try {
-          // 刷新路由避免可能的缓存问题
-          router.refresh();
-          // 使用replace而不是push进行重定向
-          router.replace("/dashboard");
-        } catch (routeError) {
-          console.error("路由跳转失败:", routeError);
-          // 备用方案：直接使用window.location
-          window.location.href = "/dashboard";
-        }
-      }, 500);
+      // 标记登录成功，触发useEffect中的跳转逻辑
+      setLoginSuccess(true);
+      
     } catch (error) {
       console.error("登录过程中发生异常:", error);
       
