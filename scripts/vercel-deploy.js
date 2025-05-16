@@ -11,15 +11,28 @@ async function main() {
   // 检查环境变量
   console.log('检查环境变量配置...');
   
+  // 使用一个特定的固定密钥确保跨部署的一致性
+  // 每次更改此密钥将导致所有用户需要重新登录
+  const fixedSecretKey = '+P5qXGcf8ZiuXSgs4Wyv4rXHGPGJqiLAFVsgqRwp0wE=';
+  
   // 如果NEXTAUTH_SECRET未设置，则使用固定的安全值
   if (!process.env.NEXTAUTH_SECRET) {
-    // 使用一个固定的密钥以确保跨部署的一致性
-    const fixedSecretKey = 'a-secure-nextauth-secret-key-for-jwt-signing-must-be-at-least-32-chars';
     console.warn(`警告: 未设置NEXTAUTH_SECRET环境变量，将使用备用固定密钥进行部署`);
-    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量，值推荐使用: ${fixedSecretKey}`);
+    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量，值为: ${fixedSecretKey}`);
     process.env.NEXTAUTH_SECRET = fixedSecretKey;
   } else {
     console.log('NEXTAUTH_SECRET已正确设置');
+    
+    // 确保密钥一致性 - 如果发现使用了不同的密钥，发出警告
+    if (process.env.NEXTAUTH_SECRET !== fixedSecretKey) {
+      console.warn('警告: 设置的NEXTAUTH_SECRET与脚本中的固定密钥不匹配');
+      console.warn('这可能导致用户JWT令牌验证失败。建议使用脚本中的固定密钥:');
+      console.warn(fixedSecretKey);
+      
+      // 强制使用固定密钥来确保一致性
+      console.log('正在覆盖环境变量NEXTAUTH_SECRET为固定值以确保一致性');
+      process.env.NEXTAUTH_SECRET = fixedSecretKey;
+    }
   }
 
   // 检查数据库连接信息
