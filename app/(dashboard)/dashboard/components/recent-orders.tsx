@@ -16,97 +16,80 @@ interface Order {
   amount: number;
 }
 
+// 示例数据
+const sampleOrders: Order[] = [
+  {
+    id: "1",
+    orderNumber: "ORD-2023-1001",
+    customerName: "河南建设集团",
+    date: new Date().toISOString(),
+    status: "processing",
+    amount: 250000,
+  },
+  {
+    id: "2",
+    orderNumber: "ORD-2023-1002",
+    customerName: "郑州市政工程",
+    date: new Date(Date.now() - 86400000).toISOString(),
+    status: "shipped",
+    amount: 135000,
+  },
+  {
+    id: "3",
+    orderNumber: "ORD-2023-1003",
+    customerName: "安阳建筑公司",
+    date: new Date(Date.now() - 172800000).toISOString(),
+    status: "completed",
+    amount: 420000,
+  },
+  {
+    id: "4",
+    orderNumber: "ORD-2023-1004",
+    customerName: "洛阳水利局",
+    date: new Date(Date.now() - 259200000).toISOString(),
+    status: "pending",
+    amount: 185000,
+  },
+];
+
 export function RecentOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
+        setLoading(true);
         const response = await fetch('/api/orders/recent');
+        
         if (response.ok) {
           const data = await response.json();
           setOrders(data);
         } else {
-          // 如果API不可用，使用示例数据
-          setOrders([
-            {
-              id: "1",
-              orderNumber: "ORD-2023-1001",
-              customerName: "河南建设集团",
-              date: new Date().toISOString(),
-              status: "processing",
-              amount: 250000,
-            },
-            {
-              id: "2",
-              orderNumber: "ORD-2023-1002",
-              customerName: "郑州市政工程",
-              date: new Date(Date.now() - 86400000).toISOString(),
-              status: "shipped",
-              amount: 135000,
-            },
-            {
-              id: "3",
-              orderNumber: "ORD-2023-1003",
-              customerName: "安阳建筑公司",
-              date: new Date(Date.now() - 172800000).toISOString(),
-              status: "completed",
-              amount: 420000,
-            },
-            {
-              id: "4",
-              orderNumber: "ORD-2023-1004",
-              customerName: "洛阳水利局",
-              date: new Date(Date.now() - 259200000).toISOString(),
-              status: "pending",
-              amount: 185000,
-            },
-          ]);
+          console.log('API返回错误状态码，使用示例数据');
+          setOrders(sampleOrders);
         }
       } catch (error) {
-        console.error("Failed to fetch recent orders:", error);
-        // 使用示例数据
-        setOrders([
-          {
-            id: "1",
-            orderNumber: "ORD-2023-1001",
-            customerName: "河南建设集团",
-            date: new Date().toISOString(),
-            status: "processing",
-            amount: 250000,
-          },
-          {
-            id: "2",
-            orderNumber: "ORD-2023-1002",
-            customerName: "郑州市政工程",
-            date: new Date(Date.now() - 86400000).toISOString(),
-            status: "shipped",
-            amount: 135000,
-          },
-          {
-            id: "3",
-            orderNumber: "ORD-2023-1003",
-            customerName: "安阳建筑公司",
-            date: new Date(Date.now() - 172800000).toISOString(),
-            status: "completed",
-            amount: 420000,
-          },
-          {
-            id: "4",
-            orderNumber: "ORD-2023-1004",
-            customerName: "洛阳水利局",
-            date: new Date(Date.now() - 259200000).toISOString(),
-            status: "pending",
-            amount: 185000,
-          },
-        ]);
+        console.error("获取订单数据失败:", error);
+        setOrders(sampleOrders);
       } finally {
         setLoading(false);
       }
     };
 
     fetchOrders();
+
+    // 添加超时保护，防止长时间加载
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.log('请求超时，使用示例数据');
+        setOrders(sampleOrders);
+        setLoading(false);
+      }
+    }, 5000);
+
+    return () => clearTimeout(timeout);
   }, []);
 
   if (loading) {
@@ -116,6 +99,22 @@ export function RecentOrders() {
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-4 text-center text-muted-foreground">
+        <p>加载数据时出错，请刷新页面重试</p>
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="py-4 text-center text-muted-foreground">
+        <p>暂无订单数据</p>
       </div>
     );
   }
