@@ -17,13 +17,28 @@ export async function GET() {
       headers: {
         'Content-Type': 'image/x-icon',
         'Cache-Control': 'public, max-age=31536000, immutable',
+        'Vary': 'Accept-Encoding',
       },
     });
   } catch (error) {
     console.error('无法读取favicon.ico文件:', error);
-    return new NextResponse(null, { status: 404 });
+    
+    // 如果无法读取文件，尝试返回一个基本的空图标
+    return new NextResponse(Buffer.from([0,0,1,0,1,0,16,16,0,0,1,0,24,0,24,8,0,0,22,0,0,0]), {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/x-icon',
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
   }
 }
 
-// 强制服务器端渲染
-export const dynamic = 'force-dynamic'; 
+// 使用静态生成而非强制动态
+export const dynamic = 'force-static';
+
+// 设置路由段配置
+export const runtime = 'nodejs';
+
+// 使用边缘兼容处理
+export const preferredRegion = 'auto'; 

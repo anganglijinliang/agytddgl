@@ -18,8 +18,35 @@ const nextConfig = {
     ];
   },
   
+  // 添加自定义headers，改善缓存控制
+  async headers() {
+    return [
+      {
+        source: '/favicon.ico',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
+  },
+  
   // 禁用中间件缓存，解决认证问题
   skipMiddlewareUrlNormalize: true,
+  
+  // 优化输出配置
+  output: 'standalone',
+  
+  // 明确设置distDir
+  distDir: '.next',
+  
+  // 图像优化配置
+  images: {
+    domains: ['*'],
+    formats: ['image/avif', 'image/webp'],
+  },
 };
 
 export default nextConfig; 

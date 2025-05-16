@@ -4,8 +4,10 @@ import { Heading } from "@/components/ui/heading";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { Suspense } from "react";
 
-export default async function DashboardPage() {
+// 创建一个异步组件来处理认证逻辑
+async function DashboardContent() {
   try {
     // 获取当前会话
     const session = await auth();
@@ -83,4 +85,13 @@ export default async function DashboardPage() {
       </div>
     );
   }
+}
+
+// 主页面组件添加Suspense边界
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">正在加载仪表盘...</div>}>
+      <DashboardContent />
+    </Suspense>
+  );
 } 

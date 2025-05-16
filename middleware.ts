@@ -18,13 +18,19 @@ export async function middleware(req: NextRequest) {
   const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
   const { pathname } = req.nextUrl;
   
-  console.log(`[${requestId}] 中间件处理请求: ${pathname}`);
-  
-  // 特殊处理favicon.ico请求 - 完全跳过中间件处理
-  if (pathname === "/favicon.ico") {
-    console.log(`[${requestId}] 完全跳过favicon.ico请求`);
-    return; // 直接返回undefined，让Next.js继续处理
+  // 特殊处理静态资源和favicon.ico请求 - 直接跳过中间件处理
+  if (
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/static/") ||
+    pathname.startsWith("/images/") ||
+    pathname.includes(".")
+  ) {
+    console.log(`[${requestId}] 静态资源请求，跳过中间件: ${pathname}`);
+    return NextResponse.next();
   }
+  
+  console.log(`[${requestId}] 中间件处理请求: ${pathname}`);
   
   // 1. 尝试从NextAuth获取令牌
   console.log(`[${requestId}] 尝试获取NextAuth令牌...`);
@@ -54,7 +60,6 @@ export async function middleware(req: NextRequest) {
     }
   } else {
     console.log(`[${requestId}] 未找到自定义令牌cookie`);
-    console.log(`[${requestId}] 所有可用cookies:`, Array.from(req.cookies.getAll()).map(c => c.name).join(', '));
   }
   
   // 使用任一有效的令牌
@@ -68,25 +73,9 @@ export async function middleware(req: NextRequest) {
     'guest'
   ) : 'guest';
 
-  // 调试日志
-  console.log(`[${requestId}] 中间件认证状态:`, { 
-    path: pathname, 
-    isAuthenticated, 
-    tokenType: nextAuthToken ? "nextauth" : (customToken ? "custom" : "none"),
-    role,
-    isApiRoute: pathname.includes('/api/') 
-  });
-
-  // 放行 API 路由和其他不需要权限的路由
-  if (
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/static/") ||
-    pathname.startsWith("/images/") ||
-    pathname.includes(".") ||
-    pathname === "/favicon.ico"
-  ) {
-    console.log(`[${requestId}] 放行API或静态资源路由: ${pathname}`);
+  // 放行 API 路由
+  if (pathname.startsWith("/api/")) {
+    console.log(`[${requestId}] 放行API路由: ${pathname}`);
     const response = NextResponse.next();
     response.headers.set("x-middleware-cache", "no-cache");
     return response;
@@ -100,14 +89,16 @@ export async function middleware(req: NextRequest) {
     "/reset-password", 
     "/test-login", 
     "/simple-login",
-    "/auth-debug"
+    "/auth-debug",
+    "/health-check"
   ];
   
   if (publicPaths.includes(pathname) || pathname === "/") {
     // 如果已登录并访问登录页，重定向到面板
     if (isAuthenticated && (pathname === "/login" || pathname === "/" || pathname === "/simple-login" || pathname === "/test-login")) {
       console.log(`[${requestId}] 已认证用户访问登录页，重定向到dashboard`);
-      const redirectResponse = NextResponse.redirect(new URL("/dashboard", req.url));
+      const redirectUrl = new URL("/dashboard", req.url);
+      const redirectResponse = NextResponse.redirect(redirectUrl);
       redirectResponse.headers.set("x-middleware-cache", "no-cache");
       return redirectResponse;
     }
@@ -120,7 +111,10 @@ export async function middleware(req: NextRequest) {
   // 需要认证但未认证的路由，重定向到登录页
   if (!isAuthenticated) {
     console.log(`[${requestId}] 未认证用户访问受保护路由: ${pathname}，重定向到登录页`);
-    const redirectResponse = NextResponse.redirect(new URL("/login", req.url));
+    const redirectUrl = new URL("/login", req.url);
+    // 添加原始URL作为查询参数，以便登录后重定向回来
+    redirectUrl.searchParams.set("callbackUrl", pathname);
+    const redirectResponse = NextResponse.redirect(redirectUrl);
     redirectResponse.headers.set("x-middleware-cache", "no-cache");
     return redirectResponse;
   }
@@ -132,7 +126,17 @@ export async function middleware(req: NextRequest) {
   return response;
 }
 
-// 配置中间件匹配的路由
+// 配置中间件匹配的路由，排除静态资源
 export const config = {
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    /*
+     * 匹配除了静态资源以外的所有路由
+     * - 匹配所有路径
+     * - 排除以下路径:
+     *   - _next/static (静态文件)
+     *   - _next/image (图片优化API)
+     *   - favicon.ico (浏览器图标)
+     */
+    "/((?!_next/static|_next/image|favicon\\.ico).*)",
+  ],
 }; 

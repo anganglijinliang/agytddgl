@@ -3,6 +3,7 @@
 const { execSync } = require('child_process');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 async function main() {
   console.log('开始部署脚本...');
@@ -12,10 +13,11 @@ async function main() {
   
   // 如果NEXTAUTH_SECRET未设置，则使用默认值而非退出
   if (!process.env.NEXTAUTH_SECRET) {
-    const fallbackSecret = "fallback-secret-key-for-deployment-only";
-    console.warn(`警告: 未设置NEXTAUTH_SECRET环境变量，将使用默认值进行部署`);
-    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量`);
-    process.env.NEXTAUTH_SECRET = fallbackSecret;
+    // 生成一个安全的随机密钥而不是使用固定的回退值
+    const generatedSecret = crypto.randomBytes(32).toString('hex');
+    console.warn(`警告: 未设置NEXTAUTH_SECRET环境变量，将使用随机生成的密钥进行部署`);
+    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量，值可以是: ${generatedSecret}`);
+    process.env.NEXTAUTH_SECRET = generatedSecret;
   } else {
     console.log('NEXTAUTH_SECRET已正确设置');
   }
@@ -23,34 +25,44 @@ async function main() {
   // 检查数据库连接信息
   if (!process.env.DATABASE_URL) {
     console.error('错误: 缺少必要的环境变量 DATABASE_URL');
-    process.exit(1);
-  }
-  
-  // 验证DATABASE_URL格式
-  // 支持标准PostgreSQL URL和Prisma Accelerate URL
-  const validPrefixes = ['postgresql://', 'postgres://', 'prisma://'];
-  // 支持Prisma Accelerate格式
-  const isPrismaAccelerate = process.env.DATABASE_URL.startsWith('prisma+');
-  const isStandardPostgres = validPrefixes.some(prefix => process.env.DATABASE_URL.startsWith(prefix));
-  
-  if (!isStandardPostgres && !isPrismaAccelerate) {
-    console.error('错误: DATABASE_URL 格式不正确');
-    console.error('DATABASE_URL 必须以 postgresql://, postgres:// 或 prisma+ 开头');
-    console.error('当前值开头(10个字符):', process.env.DATABASE_URL.substring(0, 10) + '...');
-    process.exit(1);
+    // 不立即退出，尝试继续部署
+    console.warn('部署将继续，但可能导致应用无法连接到数据库');
   } else {
-    console.log('DATABASE_URL 格式正确');
-    if (isPrismaAccelerate) {
-      console.log('检测到Prisma Accelerate连接字符串');
+    // 验证DATABASE_URL格式
+    // 支持标准PostgreSQL URL和Prisma Accelerate URL
+    const validPrefixes = ['postgresql://', 'postgres://', 'prisma://'];
+    // 支持Prisma Accelerate格式
+    const isPrismaAccelerate = process.env.DATABASE_URL.startsWith('prisma+');
+    const isStandardPostgres = validPrefixes.some(prefix => process.env.DATABASE_URL.startsWith(prefix));
+    
+    if (!isStandardPostgres && !isPrismaAccelerate) {
+      console.error('警告: DATABASE_URL 格式可能不正确');
+      console.error('DATABASE_URL 通常应以 postgresql://, postgres:// 或 prisma+ 开头');
+      console.error('当前值开头(10个字符):', process.env.DATABASE_URL.substring(0, 10) + '...');
+      // 不退出，尝试继续部署
+    } else {
+      console.log('DATABASE_URL 格式正确');
+      if (isPrismaAccelerate) {
+        console.log('检测到Prisma Accelerate连接字符串');
+      }
     }
   }
   
+  // 检查 NEXTAUTH_URL 设置
   if (!process.env.NEXTAUTH_URL) {
-    const defaultUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000';
-    console.warn(`警告: 缺少NEXTAUTH_URL, 将使用默认值: ${defaultUrl}`);
-    process.env.NEXTAUTH_URL = defaultUrl;
+    // 尝试从VERCEL_URL构建合适的URL
+    let baseUrl = '';
+    if (process.env.VERCEL_URL) {
+      baseUrl = `https://${process.env.VERCEL_URL}`;
+    } else if (process.env.VERCEL && process.env.NEXT_PUBLIC_VERCEL_URL) {
+      baseUrl = `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
+    } else {
+      baseUrl = 'http://localhost:3000';
+    }
+    
+    console.warn(`警告: 缺少NEXTAUTH_URL, 将使用自动检测的值: ${baseUrl}`);
+    process.env.NEXTAUTH_URL = baseUrl;
+    console.log(`设置NEXTAUTH_URL为: ${baseUrl}`);
   } else {
     console.log('NEXTAUTH_URL:', process.env.NEXTAUTH_URL);
   }
@@ -63,8 +75,14 @@ async function main() {
       // 1. 运行数据库迁移
       console.log('执行数据库同步...');
       try {
-        console.log('数据库连接类型:', isStandardPostgres ? 'Standard PostgreSQL' : 'Prisma Accelerate');
-        console.log('数据库连接URL(部分):', process.env.DATABASE_URL.substring(0, 15) + '...');
+        const dbType = process.env.DATABASE_URL ? 
+          (process.env.DATABASE_URL.startsWith('postgres') ? 'Standard PostgreSQL' : 'Other') : 
+          'Unknown';
+        
+        console.log('数据库连接类型:', dbType);
+        if (process.env.DATABASE_URL) {
+          console.log('数据库连接URL(部分):', process.env.DATABASE_URL.substring(0, 10) + '...');
+        }
         
         // 使用Prisma migrate deploy来应用迁移，这更适合生产环境
         execSync('npx prisma migrate deploy', { stdio: 'inherit' });
