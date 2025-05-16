@@ -1,4 +1,4 @@
-import { getProduction } from "../actions";
+import { getProduction, getDropdownData } from "../actions";
 import { format } from "date-fns";
 import { notFound } from "next/navigation";
 import { Heading } from "@/components/ui/heading";
@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { ProductionForm } from "../components/production-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { db } from "@/lib/db";
 
 interface ProductionDetailsPageProps {
   params: {
@@ -19,6 +20,54 @@ const ProductionDetailsPage = async ({ params }: ProductionDetailsPageProps) => 
   if (!production) {
     notFound();
   }
+  
+  // 获取下拉菜单数据（生产线和子订单）
+  const dropdownData = await getDropdownData();
+  
+  // 获取所有生产线
+  const productionLines = await db.productionLine.findMany();
+  
+  // 获取完整的子订单数据（包括包裹生产信息）
+  const subOrders = await db.subOrder.findMany({
+    where: {
+      id: {
+        in: [...dropdownData.subOrders.map(so => so.id), production.subOrder.id]
+      }
+    },
+    include: {
+      order: {
+        include: {
+          customer: true
+        }
+      },
+      production: true
+    }
+  });
+  
+  // 格式化子订单数据以符合生产表单的要求
+  const formattedSubOrders = subOrders.map(subOrder => {
+    const producedQuantity = subOrder.production.reduce((sum, p) => sum + p.quantity, 0);
+    const progress = Math.round((producedQuantity / subOrder.plannedQuantity) * 100);
+    const remainingQuantity = subOrder.plannedQuantity - producedQuantity;
+    
+    return {
+      id: subOrder.id,
+      specification: subOrder.specification,
+      grade: subOrder.grade,
+      plannedQuantity: subOrder.plannedQuantity,
+      producedQuantity,
+      progress,
+      remainingQuantity,
+      productionLineId: subOrder.productionLineId,
+      label: `${subOrder.order.orderNumber} - ${subOrder.order.customer.name} - ${subOrder.specification}`,
+      order: {
+        orderNumber: subOrder.order.orderNumber,
+        customer: {
+          name: subOrder.order.customer.name
+        }
+      }
+    };
+  });
 
   const statusMap: Record<string, { text: string; variant: "destructive" | "outline" | "secondary" | "default" }> = {
     NOT_STARTED: { text: "未开始", variant: "outline" },
@@ -160,7 +209,9 @@ const ProductionDetailsPage = async ({ params }: ProductionDetailsPageProps) => 
         <Heading title="编辑生产记录" description="修改生产记录信息" />
         <div className="mt-4">
           <ProductionForm 
-            initialData={production} 
+            initialData={production}
+            productionLines={productionLines}
+            subOrders={formattedSubOrders} 
           />
         </div>
       </div>

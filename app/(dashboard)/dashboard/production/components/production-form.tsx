@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -115,22 +115,41 @@ type ProductionLine = {
 interface ProductionFormProps {
   productionLines: ProductionLine[];
   subOrders: SubOrder[];
+  initialData?: any; // 添加可选的initialData属性用于编辑现有生产记录
 }
 
 export function ProductionForm({
   productionLines,
   subOrders,
+  initialData,
 }: ProductionFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSubOrder, setSelectedSubOrder] = useState<SubOrder | null>(null);
 
-  // 设置默认值
-  const defaultValues: Partial<ProductionFormValues> = {
-    productionDate: new Date(),
-    team: TeamType.TEAM_A,
-    shift: ShiftType.DAY_SHIFT,
-  };
+  // 根据是否有initialData决定是新建还是编辑模式
+  const isEditMode = !!initialData;
+
+  // 设置默认值，如果是编辑模式则使用initialData
+  const defaultValues: Partial<ProductionFormValues> = isEditMode
+    ? {
+        subOrderId: initialData.subOrder.id,
+        productionLineId: initialData.productionLineId || '',
+        team: initialData.team,
+        shift: initialData.shift,
+        productionDate: initialData.productionDate ? new Date(initialData.productionDate) : new Date(),
+        quantity: initialData.quantity,
+        startTime: initialData.startTime ? new Date(initialData.startTime) : undefined,
+        endTime: initialData.endTime ? new Date(initialData.endTime) : undefined,
+        qualityNotes: initialData.qualityNotes || '',
+        materialUsage: initialData.materialUsage || '',
+        notes: initialData.notes || '',
+      }
+    : {
+        productionDate: new Date(),
+        team: TeamType.TEAM_A,
+        shift: ShiftType.DAY_SHIFT,
+      };
 
   const form = useForm<ProductionFormValues>({
     resolver: zodResolver(productionFormSchema),
@@ -149,25 +168,56 @@ export function ProductionForm({
     }
   };
 
+  // 使用 useEffect 处理初始化选择子订单
+  useEffect(() => {
+    if (isEditMode && initialData.subOrder) {
+      const subOrderId = initialData.subOrder.id;
+      const foundSubOrder = subOrders.find(order => order.id === subOrderId);
+      if (foundSubOrder) {
+        setSelectedSubOrder(foundSubOrder);
+      }
+    }
+  }, [isEditMode, initialData, subOrders]);
+
   async function onSubmit(data: ProductionFormValues) {
     try {
       setIsLoading(true);
       
-      // 检查数量是否超过剩余数量
-      if (selectedSubOrder && data.quantity > selectedSubOrder.remainingQuantity) {
+      // 检查数量是否超过剩余数量（仅在新建模式下检查）
+      if (!isEditMode && selectedSubOrder && data.quantity > selectedSubOrder.remainingQuantity) {
         toast.error(`生产支数不能超过剩余计划支数 ${selectedSubOrder.remainingQuantity}`);
         return;
       }
       
-      // 发送请求
-      const result = await createProduction(data);
-      
-      if (result.success) {
-        toast.success("生产记录创建成功");
-        router.push("/dashboard/production");
-        router.refresh();
+      // 根据模式决定是新建还是更新
+      let result;
+      if (isEditMode) {
+        // 调用更新接口
+        result = await fetch(`/api/production/${initialData.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        }).then(res => res.json());
+        
+        if (result.success) {
+          toast.success("生产记录更新成功");
+          router.refresh();
+        } else {
+          toast.error(result.message || "更新失败，请重试");
+        }
       } else {
-        toast.error(result.message || "创建失败，请重试");
+        // 调用创建接口
+        result = await createProduction(data);
+        
+        if (result.success) {
+          toast.success("生产记录创建成功");
+          router.push("/dashboard/production");
+          router.refresh();
+        } else {
+          toast.error(result.message || "创建失败，请重试");
+        }
       }
     } catch (error) {
       toast.error("提交过程中出现错误");
@@ -484,8 +534,8 @@ export function ProductionForm({
           >
             取消
           </Button>
-          <Button type="submit" disabled={isLoading || !selectedSubOrder}>
-            {isLoading ? "提交中..." : "保存生产记录"}
+          <Button type="submit" disabled={isLoading || (!isEditMode && !selectedSubOrder)}>
+            {isLoading ? "提交中..." : isEditMode ? "更新生产记录" : "保存生产记录"}
           </Button>
         </div>
       </form>
