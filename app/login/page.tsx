@@ -11,11 +11,19 @@ export default function LoginPage({
 }) {
   const error = searchParams?.error ? String(searchParams.error) : undefined;
   
+  // 安全处理searchParams，避免打印未定义的对象
+  const safeSearchParams = searchParams ?? {};
+  const hasSearchParams = !!searchParams && Object.keys(safeSearchParams).length > 0;
+  
   // 调试信息 - 记录页面加载和错误状态
   console.log("登录页面加载", { 
     error,
-    hasSearchParams: !!searchParams && Object.keys(searchParams).length > 0,
-    searchParams
+    hasSearchParams,
+    // 只打印有限的信息，避免循环引用
+    searchParams: hasSearchParams ? 
+      Object.fromEntries(
+        Object.entries(safeSearchParams).map(([k, v]) => [k, String(v)])
+      ) : {}
   });
 
   return (
@@ -53,7 +61,7 @@ export default function LoginPage({
         )}
       </div>
       <div className="mt-4 text-xs text-center text-slate-500">
-        版本: 2.0.1 | 最后更新: 2025-05-14
+        版本: 2.0.2 | 最后更新: 2025-05-16
       </div>
     </main>
   );

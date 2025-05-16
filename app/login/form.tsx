@@ -142,14 +142,45 @@ export default function LoginForm({ error }: LoginFormProps) {
       }
       
       // 登录成功
-      toast.success("登录成功！");
+      toast.success("登录成功！正在跳转...");
       
       // 清除可能的错误状态
       setErrorMsg("");
       setLoginAttempts(0);
       
-      // 标记登录成功，触发useEffect中的跳转逻辑
-      setLoginSuccess(true);
+      // 直接使用最简单可靠的方式跳转 - 重新加载页面
+      console.log("使用直接重定向到dashboard");
+      
+      // 强制刷新页面，强制重新评估身份验证状态
+      // 延迟确保toast消息有时间显示
+      setTimeout(() => {
+        try {
+          // 先尝试清除可能的cache
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              names.forEach(function(name) {
+                caches.delete(name);
+              });
+            });
+          }
+          
+          // 避免使用history API的redirect
+          // 使用硬重定向，重新请求页面
+          window.location.href = "/dashboard";
+          
+          // 备份方案:如果3秒后仍在同一页面，重载整个页面
+          setTimeout(() => {
+            if (window.location.pathname.includes('/login')) {
+              console.log("仍在登录页，尝试重载整个页面");
+              window.location.reload();
+            }
+          }, 3000);
+        } catch (e) {
+          console.error("跳转失败:", e);
+          // 最后的备份
+          window.location.replace("/dashboard");
+        }
+      }, 500);
       
     } catch (error) {
       console.error("登录过程中发生异常:", error);

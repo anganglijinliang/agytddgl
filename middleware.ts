@@ -30,7 +30,9 @@ export async function middleware(req: NextRequest) {
   }
   
   console.log(`[${requestId}] 中间件处理请求: ${pathname}`);
-  console.log(`[${requestId}] Cookies: ${req.cookies.toString()}`);
+  // 记录Cookie，但不记录完整值以避免安全问题
+  const cookieKeys = Array.from(req.cookies.getAll()).map(c => c.name);
+  console.log(`[${requestId}] Cookies: [${cookieKeys.join(', ')}]`);
   
   // 1. 尝试从NextAuth获取令牌
   console.log(`[${requestId}] 尝试获取NextAuth令牌...`);
@@ -95,6 +97,7 @@ export async function middleware(req: NextRequest) {
     "/health-check"
   ];
   
+  // 如果路径是公开路由 
   if (publicPaths.includes(pathname) || pathname === "/") {
     // 如果已登录并访问登录页，重定向到面板
     if (isAuthenticated && (pathname === "/login" || pathname === "/" || pathname === "/simple-login" || pathname === "/test-login")) {
@@ -102,16 +105,26 @@ export async function middleware(req: NextRequest) {
       const redirectUrl = new URL("/dashboard", req.url);
       
       // 确保设置正确的响应头，防止缓存
-      const redirectResponse = NextResponse.redirect(redirectUrl);
-      redirectResponse.headers.set("Cache-Control", "no-store, max-age=0");
-      redirectResponse.headers.set("Pragma", "no-cache");
-      redirectResponse.headers.set("Expires", "0");
-      redirectResponse.headers.set("x-middleware-cache", "no-cache");
+      const redirectResponse = NextResponse.redirect(redirectUrl, {
+        // 使用301重定向，确保浏览器重定向过程正确
+        status: 302,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+          "Pragma": "no-cache",
+          "Expires": "0",
+          "x-middleware-cache": "no-cache",
+          "Location": redirectUrl.toString()
+        }
+      });
       
       return redirectResponse;
     }
+    
     console.log(`[${requestId}] 放行公开路由: ${pathname}`);
     const response = NextResponse.next();
+    response.headers.set("Cache-Control", "no-store, max-age=0");
+    response.headers.set("Pragma", "no-cache");
+    response.headers.set("Expires", "0");
     response.headers.set("x-middleware-cache", "no-cache");
     return response;
   }
@@ -122,8 +135,19 @@ export async function middleware(req: NextRequest) {
     const redirectUrl = new URL("/login", req.url);
     // 添加原始URL作为查询参数，以便登录后重定向回来
     redirectUrl.searchParams.set("callbackUrl", pathname);
-    const redirectResponse = NextResponse.redirect(redirectUrl);
-    redirectResponse.headers.set("x-middleware-cache", "no-cache");
+    
+    const redirectResponse = NextResponse.redirect(redirectUrl, {
+      // 使用302重定向，确保浏览器重定向过程正确
+      status: 302,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+        "Pragma": "no-cache", 
+        "Expires": "0",
+        "x-middleware-cache": "no-cache",
+        "Location": redirectUrl.toString()
+      }
+    });
+    
     return redirectResponse;
   }
 
