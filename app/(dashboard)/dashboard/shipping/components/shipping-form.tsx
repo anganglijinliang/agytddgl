@@ -188,7 +188,11 @@ export function ShippingForm({
         ...data,
         // u5c06Dateu683cu5f0fu8f6cu6362u4e3au5b57u7b26u4e32
         shippingDate: data.shippingDate ? format(data.shippingDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-        estimatedArrival: data.estimatedArrival ? format(data.estimatedArrival, 'yyyy-MM-dd') : undefined
+        estimatedArrival: data.estimatedArrival ? format(data.estimatedArrival, 'yyyy-MM-dd') : undefined,
+        // 确保这些字段有默认值而不是undefined
+        vehicleInfo: data.vehicleInfo || '',
+        driverInfo: data.driverInfo || '',
+        destinationInfo: data.destinationInfo || '',
       };
       
       // u6839u636eu6a21u5f0fu51b3u5b9au662fu65b0u5efau8fd8u662fu66f4u65b0

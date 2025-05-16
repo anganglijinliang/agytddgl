@@ -70,9 +70,9 @@ const shippingFormSchema = z.object({
   shippingDate: z.string(),
   transportType: z.nativeEnum(TransportationType),
   shippingNumber: z.string().optional(),
-  destinationInfo: z.string().min(1, "目的地地址为必填项"),
-  driverInfo: z.string().min(1, "司机信息为必填项"),
-  vehicleInfo: z.string().min(1, "车辆信息为必填项"),
+  destinationInfo: z.string(),
+  driverInfo: z.string(),
+  vehicleInfo: z.string(),
   notes: z.string().optional(),
 });
 

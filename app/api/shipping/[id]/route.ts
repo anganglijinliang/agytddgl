@@ -49,8 +49,8 @@ export async function PATCH(
     }
 
     // u5c06u5b57u7b26u4e32u65e5u671fu8f6cu6362u4e3aDateu5bf9u8c61
-    const shippingDate = body.shippingDate ? new Date(body.shippingDate) : null;
-    const estimatedArrival = body.estimatedArrival ? new Date(body.estimatedArrival) : null;
+    const shippingDate = body.shippingDate ? new Date(body.shippingDate) : undefined;
+    const estimatedArrival = body.estimatedArrival ? new Date(body.estimatedArrival) : undefined;
 
     // u66f4u65b0u53d1u8d27u8bb0u5f55
     const updatedShipping = await db.shipping.update({
