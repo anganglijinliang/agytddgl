@@ -1,0 +1,40 @@
+From 7e9b6b36cf59d24f7ee31b98837c8b2b52e22b4d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E5=AE=89=E9=92=A2=E6=8A=80=E6=9C=AF=E6=94=AF=E6=8C=81?=
+ <support@angang.com>
+Date: Fri, 16 May 2025 11:07:35 +0800
+Subject: [PATCH] =?UTF-8?q?=E4=BF=AE=E5=A4=8D=E9=83=A8=E7=BD=B2=E9=97=AE?=
+ =?UTF-8?q?=E9=A2=98=EF=BC=9A=E5=B0=86=20LoaderCircle=20=E5=9B=BE=E6=A0=87?=
+ =?UTF-8?q?=E6=9B=BF=E6=8D=A2=E4=B8=BA=20Loader2?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ app/(dashboard)/dashboard/orders/components/order-form.tsx | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/app/(dashboard)/dashboard/orders/components/order-form.tsx b/app/(dashboard)/dashboard/orders/components/order-form.tsx
+index e5a91bb..6d6cecd 100644
+--- a/app/(dashboard)/dashboard/orders/components/order-form.tsx
++++ b/app/(dashboard)/dashboard/orders/components/order-form.tsx
+@@ -32,7 +32,7 @@ import { Order, OrderStatus, ShippingMethod } from "@prisma/client";
+ import { createOrder, updateOrder } from "../actions";
+ import { SubOrderForm } from "./sub-order-form";
+ import { createAuditLog } from "@/lib/create-audit-log";
+-import { AlertCircle, LoaderCircle } from "lucide-react";
++import { AlertCircle, Loader2 } from "lucide-react";
+ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+ 
+ type Customer = {
+@@ -370,7 +370,7 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                 <Button disabled={isLoading} type="submit">
+                   {isLoading ? (
+                     <>
+-                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
++                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                       处理中...
+                     </>
+                   ) : (
+-- 
+2.48.1.windows.1
+
