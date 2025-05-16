@@ -7,7 +7,6 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ProductionStatus, ShiftType, TeamType } from "@prisma/client";
 import { z } from "zod";
-import { ProductionFormValues } from "./components/production-form";
 import { OrderStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/session";
 import { createAuditLog } from "@/lib/create-audit-log";
@@ -68,15 +67,39 @@ export async function getProduction(id: string): Promise<ProductionWithDetails |
   }
 }
 
+// 定义生产记录表单架构
 const productionFormSchema = z.object({
-  subOrderId: z.string().min(1, "订单项目为必填项"),
-  status: z.union([z.nativeEnum(ProductionStatus), z.literal("COMPLETED"), z.literal("PAUSED")]),
-  team: z.nativeEnum(TeamType),
-  shift: z.nativeEnum(ShiftType),
-  quantity: z.number().min(1, "数量必须大于0"),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
+  subOrderId: z.string({
+    required_error: "请选择子订单",
+  }),
+  productionLineId: z.string({
+    required_error: "请选择生产线",
+  }),
+  team: z.nativeEnum(TeamType, {
+    required_error: "请选择班组",
+  }),
+  shift: z.nativeEnum(ShiftType, {
+    required_error: "请选择班次",
+  }),
+  productionDate: z.date({
+    required_error: "请选择生产日期",
+  }),
+  quantity: z.coerce
+    .number({
+      required_error: "请输入生产支数",
+      invalid_type_error: "请输入有效的数字",
+    })
+    .min(1, { message: "生产支数必须大于0" }),
+  startTime: z.date().optional(),
+  endTime: z.date().optional(),
+  qualityNotes: z.string().optional(),
+  materialUsage: z.string().optional(),
   notes: z.string().optional(),
+  status: z.union([
+    z.nativeEnum(ProductionStatus),
+    z.literal("COMPLETED"),
+    z.literal("PAUSED")
+  ]).optional(),
 });
 
 export type ProductionFormValues = z.infer<typeof productionFormSchema>;
@@ -215,46 +238,53 @@ export async function updateProduction(id: string, values: ProductionFormValues)
     }
 
     // 状态映射 - 将前端状态映射为数据库有效的状态
-    let dbStatus;
-    if (values.status === "COMPLETED") {
-      dbStatus = "FINISHED";
-    } else if (values.status === "PAUSED") {
-      dbStatus = "NOT_STARTED"; // 或其他合适的值
-    } else {
-      dbStatus = values.status; // NOT_STARTED 或 IN_PROGRESS 不需要映射
+    let dbStatus: ProductionStatus = ProductionStatus.FINISHED;
+    if (values.status) {
+      if (values.status === ProductionStatus.NOT_STARTED) {
+        dbStatus = ProductionStatus.NOT_STARTED;
+      } else if (values.status === ProductionStatus.IN_PROGRESS) {
+        dbStatus = ProductionStatus.IN_PROGRESS;
+      } else if (values.status === ProductionStatus.FINISHED || values.status === "COMPLETED") {
+        dbStatus = ProductionStatus.FINISHED;
+      } else if (values.status === "PAUSED") {
+        dbStatus = ProductionStatus.NOT_STARTED;
+      }
     }
 
     // 更新生产记录
     await db.production.update({
       where: { id },
       data: {
-        status: dbStatus as ProductionStatus,
+        status: dbStatus,
         team: values.team,
         shift: values.shift,
+        productionDate: values.productionDate,
         quantity: values.quantity,
-        startTime: values.startTime ? new Date(values.startTime) : null,
-        endTime: values.endTime ? new Date(values.endTime) : null,
-        notes: values.notes,
+        startTime: values.startTime || null,
+        endTime: values.endTime || null,
+        qualityNotes: values.qualityNotes || null,
+        materialUsage: values.materialUsage || null,
+        notes: values.notes || null,
       },
     });
 
     // 记录审计日志
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "UPDATE",
-        resource: "PRODUCTION",
-        resourceId: id,
-        description: `更新了订单 ${subOrder.order.orderNumber} 的生产记录，数量: ${values.quantity}`,
-      },
+    await createAuditLog({
+      action: "UPDATE",
+      resource: "PRODUCTION",
+      resourceId: id,
+      description: `更新了订单 ${subOrder.order.orderNumber} 的生产记录，数量: ${values.quantity}`,
+      metadata: JSON.stringify(values),
     });
 
     revalidatePath("/dashboard/production");
-    revalidatePath(`/dashboard/production/${id}`);
+    revalidatePath("/dashboard/orders");
+    revalidatePath(`/dashboard/orders/${subOrder.orderId}`);
+
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("更新生产记录失败:", error);
-    return { error: "更新生产记录失败" };
+    return { error: `更新生产记录失败: ${error.message}` };
   }
 }
 
