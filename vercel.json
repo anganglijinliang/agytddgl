@@ -12,7 +12,7 @@
     }
   ],
   "env": {
-    "NEXTAUTH_URL": "${VERCEL_URL}",
+    "NEXTAUTH_URL": "https://${VERCEL_URL}",
     "DATABASE_URL": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
     "NEXTAUTH_SECRET": "${NEXTAUTH_SECRET}",
     "CRON_API_KEY": "${CRON_API_KEY}",

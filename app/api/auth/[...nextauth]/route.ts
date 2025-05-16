@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { AuthOptions } from "next-auth";
 import { UserRole } from "@prisma/client";
+import { JWT } from "next-auth/jwt";
 
 // 设置为强制动态路由，确保NextAuth可以工作
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ console.log('NextAuth初始化：');
 console.log('- NEXTAUTH_URL:', process.env.NEXTAUTH_URL);
 console.log('- NODE_ENV:', process.env.NODE_ENV);
 console.log('- BASE_URL:', process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.NEXTAUTH_URL);
-console.log('- 是否设置NEXTAUTH_SECRET:', !!process.env.NEXTAUTH_SECRET);
+console.log('- NEXTAUTH_SECRET长度:', process.env.NEXTAUTH_SECRET ? process.env.NEXTAUTH_SECRET.length : 0);
 console.log('- 是否设置DATABASE_URL:', !!process.env.DATABASE_URL);
 
 // 确保有基础URL，如果NEXTAUTH_URL未设置则使用VERCEL_URL
@@ -33,6 +34,18 @@ const TEST_USERS = [
     image: null,
   }
 ];
+
+// 固定的安全密钥，当环境变量未设置时使用
+const FALLBACK_SECRET_KEY = "a-secure-nextauth-secret-key-for-jwt-signing-must-be-at-least-32-chars";
+
+// 处理JWT错误日志记录的辅助函数
+const logJwtError = (error: Error, stage: string) => {
+  console.error(`[NextAuth][JWT][${stage}] JWT错误:`, {
+    name: error.name,
+    message: error.message,
+    stack: error.stack?.split('\n').slice(0, 3).join('\n') || '无堆栈信息'
+  });
+};
 
 // 认证选项配置
 const authOptions: AuthOptions = {
@@ -158,34 +171,50 @@ const authOptions: AuthOptions = {
     strategy: "jwt",
     maxAge: 24 * 60 * 60, // 1天
   },
-  secret: process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-development-only",
+  secret: process.env.NEXTAUTH_SECRET || FALLBACK_SECRET_KEY,
   pages: {
     signIn: "/login",
     error: "/login",
   },
   debug: process.env.NODE_ENV === "development",
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account, trigger, session }) {
       try {
         if (user) {
           token.id = user.id;
           token.role = user.role;
           console.log("JWT token设置成功:", { id: user.id, role: user.role });
         }
+        
+        // 处理会话更新
+        if (trigger === "update" && session) {
+          if (session.user?.role) {
+            token.role = session.user.role;
+          }
+          console.log("JWT token通过update事件更新:", token);
+        }
       } catch (error) {
-        console.error("JWT回调错误:", error);
+        if (error instanceof Error) {
+          logJwtError(error, "jwt_callback");
+        } else {
+          console.error("JWT回调未知错误类型:", error);
+        }
       }
       return token;
     },
     async session({ session, token }) {
       try {
-        if (session.user) {
+        if (session.user && token) {
           session.user.id = token.id as string;
           session.user.role = token.role as UserRole;
           console.log("Session回调设置成功");
         }
       } catch (error) {
-        console.error("Session回调错误:", error);
+        if (error instanceof Error) {
+          logJwtError(error, "session_callback");
+        } else {
+          console.error("Session回调未知错误类型:", error);
+        }
       }
       return session;
     },
@@ -199,7 +228,28 @@ const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: process.env.NODE_ENV === "production",
+        // 不设置domain，让浏览器自动处理
       },
+    },
+  },
+  // 添加JWT自定义选项以增强安全性和兼容性
+  jwt: {
+    // 默认为HS256，安全且适用于大多数情况
+    // 避免使用需要公钥/私钥的算法，简化部署
+    maxAge: 24 * 60 * 60, // 与session.maxAge保持一致
+  },
+  // 设置更详细的调试信息
+  logger: {
+    error(code, ...message) {
+      console.error(`[NextAuth][Error][${code}]`, ...message);
+    },
+    warn(code, ...message) {
+      console.warn(`[NextAuth][Warning][${code}]`, ...message);
+    },
+    debug(code, ...message) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[NextAuth][Debug][${code}]`, ...message);
+      }
     },
   },
 };

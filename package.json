@@ -16,7 +16,8 @@
     "vercel-build": "node scripts/vercel-deploy.js && next build",
     "create-test-user": "ts-node --transpile-only scripts/create-test-user.ts",
     "clean": "rm -rf .next && rm -rf node_modules",
-    "rebuild": "npm run clean && npm install && npm run build"
+    "rebuild": "npm run clean && npm install && npm run build",
+    "reset-nextauth": "node scripts/reset-nextauth.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^1.3.3",

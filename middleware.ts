@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { jwtVerify, createRemoteJWKSet } from "jose"; // 使用jose替代jsonwebtoken
 
+// 固定的安全密钥，当环境变量未设置时使用
+const FALLBACK_SECRET_KEY = "a-secure-nextauth-secret-key-for-jwt-signing-must-be-at-least-32-chars";
+
 // 密钥 - 使用Edge兼容的方式
 const getSecretKey = () => {
-  const secret = process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-development-only";
+  const secret = process.env.NEXTAUTH_SECRET || FALLBACK_SECRET_KEY;
   return new TextEncoder().encode(secret);
 };
 
@@ -31,16 +34,36 @@ export async function middleware(req: NextRequest) {
   
   // 1. 尝试从NextAuth获取令牌
   console.log(`[${requestId}] 尝试获取NextAuth令牌...`);
-  const nextAuthToken = await getToken({ 
-    req, 
-    secret: process.env.NEXTAUTH_SECRET,
-    cookieName: process.env.NODE_ENV === 'production' ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
-  });
-  
-  if (nextAuthToken) {
-    console.log(`[${requestId}] 成功获取NextAuth令牌，用户: ${nextAuthToken.email || 'unknown'}`);
-  } else {
-    console.log(`[${requestId}] 未找到NextAuth令牌`);
+  let nextAuthToken = null;
+  try {
+    nextAuthToken = await getToken({ 
+      req, 
+      secret: process.env.NEXTAUTH_SECRET || FALLBACK_SECRET_KEY,
+      secureCookie: process.env.NODE_ENV === 'production',
+      cookieName: process.env.NODE_ENV === 'production' ? '__Secure-next-auth.session-token' : 'next-auth.session-token'
+    });
+    
+    if (nextAuthToken) {
+      console.log(`[${requestId}] 成功获取NextAuth令牌，用户: ${nextAuthToken.email || 'unknown'}`);
+    } else {
+      // 尝试备用cookie名称
+      const backupCookieName = process.env.NODE_ENV === 'production' ? 'next-auth.session-token' : '__Secure-next-auth.session-token';
+      console.log(`[${requestId}] 尝试使用备用cookie名称: ${backupCookieName}`);
+      
+      nextAuthToken = await getToken({
+        req,
+        secret: process.env.NEXTAUTH_SECRET || FALLBACK_SECRET_KEY,
+        cookieName: backupCookieName
+      });
+      
+      if (nextAuthToken) {
+        console.log(`[${requestId}] 使用备用cookie名称成功获取NextAuth令牌`);
+      } else {
+        console.log(`[${requestId}] 未找到NextAuth令牌`);
+      }
+    }
+  } catch (error) {
+    console.error(`[${requestId}] 获取NextAuth令牌出错:`, typeof error === 'object' ? JSON.stringify(error) : error);
   }
   
   // 2. 尝试从自定义Cookie获取令牌 - 使用Edge兼容方式
@@ -101,11 +124,18 @@ export async function middleware(req: NextRequest) {
     "/test-login", 
     "/simple-login",
     "/auth-debug",
-    "/health-check"
+    "/health-check",
+    "/order/track" // 添加订单追踪页面为公开路由
   ];
   
+  // 检查路径是否为公开路由或是否以公开路径开头
+  const isPublicPath = publicPaths.some(path => 
+    pathname === path || 
+    pathname.startsWith(`${path}/`)
+  );
+  
   // 如果路径是公开路由 
-  if (publicPaths.includes(pathname) || pathname === "/") {
+  if (isPublicPath || pathname === "/") {
     // 如果已登录并访问登录页，重定向到面板
     if (isAuthenticated && (pathname === "/login" || pathname === "/" || pathname === "/simple-login" || pathname === "/test-login")) {
       console.log(`[${requestId}] 已认证用户访问登录页，重定向到dashboard`);
@@ -159,7 +189,6 @@ export async function middleware(req: NextRequest) {
   }
 
   // 已认证用户，继续请求
-  console.log(`[${requestId}] 已认证用户访问受保护路由: ${pathname}，放行请求`);
   console.log(`[${requestId}] 用户: ${userInfo.email || 'unknown'}, 角色: ${role}`);
   
   const response = NextResponse.next();

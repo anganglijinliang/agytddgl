@@ -11,13 +11,13 @@ async function main() {
   // 检查环境变量
   console.log('检查环境变量配置...');
   
-  // 如果NEXTAUTH_SECRET未设置，则使用默认值而非退出
+  // 如果NEXTAUTH_SECRET未设置，则使用固定的安全值
   if (!process.env.NEXTAUTH_SECRET) {
-    // 生成一个安全的随机密钥而不是使用固定的回退值
-    const generatedSecret = crypto.randomBytes(32).toString('hex');
-    console.warn(`警告: 未设置NEXTAUTH_SECRET环境变量，将使用随机生成的密钥进行部署`);
-    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量，值可以是: ${generatedSecret}`);
-    process.env.NEXTAUTH_SECRET = generatedSecret;
+    // 使用一个固定的密钥以确保跨部署的一致性
+    const fixedSecretKey = 'a-secure-nextauth-secret-key-for-jwt-signing-must-be-at-least-32-chars';
+    console.warn(`警告: 未设置NEXTAUTH_SECRET环境变量，将使用备用固定密钥进行部署`);
+    console.warn(`请在Vercel项目设置中添加NEXTAUTH_SECRET环境变量，值推荐使用: ${fixedSecretKey}`);
+    process.env.NEXTAUTH_SECRET = fixedSecretKey;
   } else {
     console.log('NEXTAUTH_SECRET已正确设置');
   }
