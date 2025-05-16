@@ -13,7 +13,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:reset-migrations": "node scripts/reset-migrations.js",
     "postinstall": "prisma generate",
-    "vercel-build": "node scripts/vercel-deploy.js && next build",
+    "vercel-build": "node scripts/fix-nextauth-jwt.js && node scripts/vercel-deploy.js && next build",
     "create-test-user": "ts-node --transpile-only scripts/create-test-user.ts",
     "clean": "rm -rf .next && rm -rf node_modules",
     "rebuild": "npm run clean && npm install && npm run build",
