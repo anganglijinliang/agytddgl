@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Overview } from "@/components/dashboard/overview";
-import { RecentOrders } from "@/components/dashboard/recent-orders";
-import { SmartAlert } from "../components/smart-alert";
+import { RecentOrders } from "./components/recent-orders";
+import { SmartAlert } from "./components/smart-alert";
 import { FileBarChart, Factory, TruckIcon, Package, Calendar, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

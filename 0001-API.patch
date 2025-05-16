@@ -1,0 +1,5207 @@
+From 150220ab00dd9e4fb4dd72b1ac7aba8589d270be Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E5=AE=89=E9=92=A2=E6=8A=80=E6=9C=AF=E6=94=AF=E6=8C=81?=
+ <support@angang.com>
+Date: Fri, 16 May 2025 10:31:37 +0800
+Subject: [PATCH] =?UTF-8?q?=E4=BC=98=E5=8C=96=E8=AE=A2=E5=8D=95=E7=AE=A1?=
+ =?UTF-8?q?=E7=90=86=E7=B3=BB=E7=BB=9F=E5=8A=9F=E8=83=BD:=20=E6=B7=BB?=
+ =?UTF-8?q?=E5=8A=A0=E6=99=BA=E8=83=BD=E6=8F=90=E9=86=92=E7=B3=BB=E7=BB=9F?=
+ =?UTF-8?q?,=20=E4=BC=98=E5=8C=96=E8=AE=A2=E5=8D=95=E8=A1=A8=E5=8D=95,=20?=
+ =?UTF-8?q?=E6=94=B9=E8=BF=9B=E8=AE=A2=E5=8D=95=E8=B7=9F=E8=B8=AA=E9=A1=B5?=
+ =?UTF-8?q?=E9=9D=A2,=20=E5=88=9B=E5=BB=BAAPI=E6=9C=8D=E5=8A=A1,=20?=
+ =?UTF-8?q?=E9=87=8D=E6=96=B0=E8=AE=BE=E8=AE=A1=E4=BB=AA=E8=A1=A8=E7=9B=98?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../dashboard/components/smart-alert.tsx      | 391 +++++++++++++
+ .../dashboard/dashboard-client.tsx            | 326 +++++++++--
+ .../dashboard/orders/[id]/qrcode/page.tsx     | 122 ++++
+ .../orders/components/order-form.tsx          | 169 +++++-
+ .../orders/components/orders-table.tsx        | 166 +++---
+ .../orders/components/sub-order-form.tsx      | 345 ++++++-----
+ app/(dashboard)/dashboard/page.tsx            |  99 +++-
+ .../dashboard/production/actions.ts           | 362 +++++++++---
+ .../production/components/production-form.tsx | 467 +++++++++------
+ .../dashboard/production/new/page.tsx         |  92 ++-
+ .../shipping/components/shipping-form.tsx     | 534 +++++++++++-------
+ app/api/alerts/route.ts                       | 297 ++++++++++
+ app/order/track/[orderNumber]/page.tsx        | 504 +++++++++++++++++
+ components/ui/command.tsx                     | 155 +++++
+ components/ui/dialog.tsx                      | 122 ++++
+ lib/create-audit-log.ts                       |  51 ++
+ lib/session.ts                                |  33 ++
+ package-lock.json                             |  51 +-
+ package.json                                  |   5 +-
+ public/icon.png                               | Bin 0 -> 15086 bytes
+ 20 files changed, 3525 insertions(+), 766 deletions(-)
+ create mode 100644 app/(dashboard)/dashboard/components/smart-alert.tsx
+ create mode 100644 app/(dashboard)/dashboard/orders/[id]/qrcode/page.tsx
+ create mode 100644 app/api/alerts/route.ts
+ create mode 100644 app/order/track/[orderNumber]/page.tsx
+ create mode 100644 components/ui/command.tsx
+ create mode 100644 components/ui/dialog.tsx
+ create mode 100644 lib/create-audit-log.ts
+ create mode 100644 lib/session.ts
+ create mode 100644 public/icon.png
+
+diff --git a/app/(dashboard)/dashboard/components/smart-alert.tsx b/app/(dashboard)/dashboard/components/smart-alert.tsx
+new file mode 100644
+index 0000000..d5d3de6
+--- /dev/null
++++ b/app/(dashboard)/dashboard/components/smart-alert.tsx
+@@ -0,0 +1,391 @@
++"use client";
++
++import { useState, useEffect } from "react";
++import { useRouter } from "next/navigation";
++import { 
++  AlertCircle, 
++  Calendar, 
++  Check, 
++  Clock, 
++  X, 
++  AlertTriangle, 
++  Info, 
++  Bell
++} from "lucide-react";
++import { Button } from "@/components/ui/button";
++import {
++  Alert,
++  AlertDescription,
++  AlertTitle,
++} from "@/components/ui/alert";
++import {
++  Card,
++  CardContent,
++  CardDescription,
++  CardFooter,
++  CardHeader,
++  CardTitle,
++} from "@/components/ui/card";
++import {
++  Tabs,
++  TabsContent,
++  TabsList,
++  TabsTrigger,
++} from "@/components/ui/tabs";
++import { Badge } from "@/components/ui/badge";
++import { Separator } from "@/components/ui/separator";
++import { cn } from "@/lib/utils";
++
++type AlertItem = {
++  id: string;
++  type: "urgent" | "deadline" | "info" | "warning";
++  title: string;
++  description: string;
++  link?: string;
++  date: Date;
++  priority: number;
++  isNew?: boolean;
++};
++
++interface SmartAlertProps {
++  alerts: AlertItem[];
++  onDismiss?: (id: string) => void;
++  onMarkRead?: (id: string) => void;
++  onViewAll?: () => void;
++}
++
++export function SmartAlert({ 
++  alerts = [], 
++  onDismiss, 
++  onMarkRead,
++  onViewAll
++}: SmartAlertProps) {
++  const router = useRouter();
++  const [visibleAlerts, setVisibleAlerts] = useState<AlertItem[]>(alerts);
++  const [activeTab, setActiveTab] = useState<string>("all");
++
++  // 按照优先级排序提醒
++  useEffect(() => {
++    const sortedAlerts = [...alerts].sort((a, b) => b.priority - a.priority);
++    setVisibleAlerts(sortedAlerts);
++  }, [alerts]);
++
++  // 过滤提醒列表
++  const filteredAlerts = visibleAlerts.filter(alert => {
++    if (activeTab === "all") return true;
++    return alert.type === activeTab;
++  });
++
++  // 处理提醒点击
++  const handleAlertClick = (alert: AlertItem) => {
++    if (alert.link) {
++      router.push(alert.link);
++    }
++    
++    if (onMarkRead && alert.isNew) {
++      onMarkRead(alert.id);
++    }
++  };
++
++  // 处理关闭提醒
++  const handleDismiss = (e: React.MouseEvent, id: string) => {
++    e.stopPropagation();
++    
++    if (onDismiss) {
++      onDismiss(id);
++      setVisibleAlerts(visibleAlerts.filter(alert => alert.id !== id));
++    }
++  };
++
++  // 获取提醒图标
++  const getAlertIcon = (type: string) => {
++    switch (type) {
++      case "urgent":
++        return <AlertCircle className="h-5 w-5 text-destructive" />;
++      case "deadline":
++        return <Calendar className="h-5 w-5 text-warning" />;
++      case "warning":
++        return <AlertTriangle className="h-5 w-5 text-warning" />;
++      default:
++        return <Info className="h-5 w-5 text-primary" />;
++    }
++  };
++
++  // 获取提醒颜色
++  const getAlertColor = (type: string) => {
++    switch (type) {
++      case "urgent":
++        return "border-destructive/50 bg-destructive/10";
++      case "deadline":
++        return "border-warning/50 bg-warning/10";
++      case "warning":
++        return "border-warning/50 bg-warning/10";
++      default:
++        return "border-primary/50 bg-primary/5";
++    }
++  };
++
++  // 获取时间显示
++  const getTimeDisplay = (date: Date) => {
++    const now = new Date();
++    const diffInDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
++    
++    if (diffInDays < 0) {
++      return `已超期 ${Math.abs(diffInDays)} 天`;
++    } else if (diffInDays === 0) {
++      return "今天";
++    } else if (diffInDays === 1) {
++      return "明天";
++    } else if (diffInDays < 7) {
++      return `${diffInDays} 天后`;
++    } else {
++      return date.toLocaleDateString();
++    }
++  };
++
++  if (alerts.length === 0) {
++    return (
++      <Card>
++        <CardHeader>
++          <CardTitle className="flex items-center">
++            <Bell className="mr-2 h-5 w-5" />
++            智能提醒
++          </CardTitle>
++          <CardDescription>您的订单管理提醒</CardDescription>
++        </CardHeader>
++        <CardContent>
++          <div className="flex items-center justify-center p-6 text-muted-foreground">
++            <p>当前没有需要注意的提醒</p>
++          </div>
++        </CardContent>
++      </Card>
++    );
++  }
++
++  return (
++    <Card>
++      <CardHeader>
++        <div className="flex items-center justify-between">
++          <CardTitle className="flex items-center">
++            <Bell className="mr-2 h-5 w-5" />
++            智能提醒
++          </CardTitle>
++          <Badge variant="outline">{alerts.length}</Badge>
++        </div>
++        <CardDescription>优先处理紧急订单和临近交期订单</CardDescription>
++      </CardHeader>
++      <CardContent className="p-0">
++        <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
++          <div className="px-6 pt-2">
++            <TabsList className="w-full">
++              <TabsTrigger value="all" className="flex-1">全部</TabsTrigger>
++              <TabsTrigger value="urgent" className="flex-1">紧急</TabsTrigger>
++              <TabsTrigger value="deadline" className="flex-1">交期</TabsTrigger>
++              <TabsTrigger value="info" className="flex-1">通知</TabsTrigger>
++            </TabsList>
++          </div>
++          
++          <TabsContent value="all" className="mt-0">
++            <div className="space-y-1 p-2 max-h-[320px] overflow-y-auto">
++              {filteredAlerts.length === 0 ? (
++                <div className="flex items-center justify-center p-6 text-muted-foreground">
++                  <p>当前分类没有提醒</p>
++                </div>
++              ) : (
++                filteredAlerts.map((alert) => (
++                  <div
++                    key={alert.id}
++                    className={cn(
++                      "flex items-start p-3 rounded-lg border cursor-pointer transition-colors hover:bg-accent",
++                      getAlertColor(alert.type),
++                      alert.isNew && "border-l-[3px]"
++                    )}
++                    onClick={() => handleAlertClick(alert)}
++                  >
++                    <div className="mr-2 mt-0.5">
++                      {getAlertIcon(alert.type)}
++                    </div>
++                    <div className="flex-1 ml-1">
++                      <div className="flex items-center justify-between">
++                        <h4 className="font-medium text-sm">
++                          {alert.title}
++                          {alert.isNew && (
++                            <Badge variant="default" className="ml-2 text-[10px] px-1 py-0 h-4">
++                              新
++                            </Badge>
++                          )}
++                        </h4>
++                        <div className="flex items-center gap-2">
++                          <span className="text-xs text-muted-foreground">
++                            {getTimeDisplay(alert.date)}
++                          </span>
++                          {onDismiss && (
++                            <button
++                              onClick={(e) => handleDismiss(e, alert.id)}
++                              className="text-muted-foreground hover:text-foreground"
++                            >
++                              <X className="h-4 w-4" />
++                            </button>
++                          )}
++                        </div>
++                      </div>
++                      <p className="text-xs text-muted-foreground mt-1">
++                        {alert.description}
++                      </p>
++                    </div>
++                  </div>
++                ))
++              )}
++            </div>
++          </TabsContent>
++          
++          <TabsContent value="urgent" className="mt-0">
++            <div className="space-y-1 p-2 max-h-[320px] overflow-y-auto">
++              {filteredAlerts.length === 0 ? (
++                <div className="flex items-center justify-center p-6 text-muted-foreground">
++                  <p>当前没有紧急提醒</p>
++                </div>
++              ) : (
++                filteredAlerts.map((alert) => (
++                  <div
++                    key={alert.id}
++                    className={cn(
++                      "flex items-start p-3 rounded-lg border cursor-pointer transition-colors hover:bg-accent",
++                      getAlertColor(alert.type),
++                      alert.isNew && "border-l-[3px]"
++                    )}
++                    onClick={() => handleAlertClick(alert)}
++                  >
++                    <div className="mr-2 mt-0.5">
++                      {getAlertIcon(alert.type)}
++                    </div>
++                    <div className="flex-1 ml-1">
++                      <div className="flex items-center justify-between">
++                        <h4 className="font-medium text-sm">{alert.title}</h4>
++                        <div className="flex items-center gap-2">
++                          <span className="text-xs text-muted-foreground">
++                            {getTimeDisplay(alert.date)}
++                          </span>
++                          {onDismiss && (
++                            <button
++                              onClick={(e) => handleDismiss(e, alert.id)}
++                              className="text-muted-foreground hover:text-foreground"
++                            >
++                              <X className="h-4 w-4" />
++                            </button>
++                          )}
++                        </div>
++                      </div>
++                      <p className="text-xs text-muted-foreground mt-1">
++                        {alert.description}
++                      </p>
++                    </div>
++                  </div>
++                ))
++              )}
++            </div>
++          </TabsContent>
++          
++          <TabsContent value="deadline" className="mt-0">
++            <div className="space-y-1 p-2 max-h-[320px] overflow-y-auto">
++              {filteredAlerts.length === 0 ? (
++                <div className="flex items-center justify-center p-6 text-muted-foreground">
++                  <p>当前没有临近交期提醒</p>
++                </div>
++              ) : (
++                filteredAlerts.map((alert) => (
++                  <div
++                    key={alert.id}
++                    className={cn(
++                      "flex items-start p-3 rounded-lg border cursor-pointer transition-colors hover:bg-accent",
++                      getAlertColor(alert.type),
++                      alert.isNew && "border-l-[3px]"
++                    )}
++                    onClick={() => handleAlertClick(alert)}
++                  >
++                    <div className="mr-2 mt-0.5">
++                      {getAlertIcon(alert.type)}
++                    </div>
++                    <div className="flex-1 ml-1">
++                      <div className="flex items-center justify-between">
++                        <h4 className="font-medium text-sm">{alert.title}</h4>
++                        <div className="flex items-center gap-2">
++                          <span className="text-xs text-muted-foreground">
++                            {getTimeDisplay(alert.date)}
++                          </span>
++                          {onDismiss && (
++                            <button
++                              onClick={(e) => handleDismiss(e, alert.id)}
++                              className="text-muted-foreground hover:text-foreground"
++                            >
++                              <X className="h-4 w-4" />
++                            </button>
++                          )}
++                        </div>
++                      </div>
++                      <p className="text-xs text-muted-foreground mt-1">
++                        {alert.description}
++                      </p>
++                    </div>
++                  </div>
++                ))
++              )}
++            </div>
++          </TabsContent>
++          
++          <TabsContent value="info" className="mt-0">
++            <div className="space-y-1 p-2 max-h-[320px] overflow-y-auto">
++              {filteredAlerts.length === 0 ? (
++                <div className="flex items-center justify-center p-6 text-muted-foreground">
++                  <p>当前没有通知提醒</p>
++                </div>
++              ) : (
++                filteredAlerts.map((alert) => (
++                  <div
++                    key={alert.id}
++                    className={cn(
++                      "flex items-start p-3 rounded-lg border cursor-pointer transition-colors hover:bg-accent",
++                      getAlertColor(alert.type),
++                      alert.isNew && "border-l-[3px]"
++                    )}
++                    onClick={() => handleAlertClick(alert)}
++                  >
++                    <div className="mr-2 mt-0.5">
++                      {getAlertIcon(alert.type)}
++                    </div>
++                    <div className="flex-1 ml-1">
++                      <div className="flex items-center justify-between">
++                        <h4 className="font-medium text-sm">{alert.title}</h4>
++                        <div className="flex items-center gap-2">
++                          <span className="text-xs text-muted-foreground">
++                            {getTimeDisplay(alert.date)}
++                          </span>
++                          {onDismiss && (
++                            <button
++                              onClick={(e) => handleDismiss(e, alert.id)}
++                              className="text-muted-foreground hover:text-foreground"
++                            >
++                              <X className="h-4 w-4" />
++                            </button>
++                          )}
++                        </div>
++                      </div>
++                      <p className="text-xs text-muted-foreground mt-1">
++                        {alert.description}
++                      </p>
++                    </div>
++                  </div>
++                ))
++              )}
++            </div>
++          </TabsContent>
++        </Tabs>
++      </CardContent>
++      <CardFooter className="border-t px-6 py-3">
++        <Button variant="ghost" size="sm" className="w-full" onClick={onViewAll}>
++          查看所有提醒
++        </Button>
++      </CardFooter>
++    </Card>
++  );
++} 
+\ No newline at end of file
+diff --git a/app/(dashboard)/dashboard/dashboard-client.tsx b/app/(dashboard)/dashboard/dashboard-client.tsx
+index c28c0cf..8a52093 100644
+--- a/app/(dashboard)/dashboard/dashboard-client.tsx
++++ b/app/(dashboard)/dashboard/dashboard-client.tsx
+@@ -1,80 +1,304 @@
+ "use client";
+ 
+-import { useEffect, useState } from "react";
+-import { useRouter } from "next/navigation";
+-import { Heading } from "@/components/ui/heading";
+-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
++import { useState, useEffect } from "react";
++import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
++import { Overview } from "@/components/dashboard/overview";
++import { RecentOrders } from "@/components/dashboard/recent-orders";
++import { SmartAlert } from "../components/smart-alert";
++import { FileBarChart, Factory, TruckIcon, Package, Calendar, Loader2, RefreshCw } from "lucide-react";
+ import { Button } from "@/components/ui/button";
+-import Link from "next/link";
+-import { useSession } from "next-auth/react";
++import { Skeleton } from "@/components/ui/skeleton";
++import { useRouter } from "next/navigation";
++import { useToast } from "@/components/ui/use-toast";
++
++interface DashboardClientProps {
++  // 如果有需要从服务端获取的初始数据，可以在这里定义
++  initialData?: any;
++}
+ 
+-export default function DashboardClient() {
++export function DashboardClient({ initialData }: DashboardClientProps) {
+   const router = useRouter();
+-  const { data: session, status } = useSession();
++  const { toast } = useToast();
++  const [alerts, setAlerts] = useState<any[]>([]);
++  const [statistics, setStatistics] = useState<any>({
++    totalOrders: 0,
++    inProduction: 0,
++    pendingShipment: 0,
++    completed: 0
++  });
+   const [isLoading, setIsLoading] = useState(true);
+ 
++  // 初始化统计数据
+   useEffect(() => {
+-    // 如果会话加载完成且未认证，重定向到登录页
+-    if (status === "unauthenticated") {
+-      console.log("Dashboard Client: 未检测到会话，重定向到登录页");
+-      router.push("/login");
+-    } else if (status === "authenticated") {
+-      // 加载完成，允许显示内容
++    if (initialData) {
++      setStatistics(initialData);
+       setIsLoading(false);
+     }
+-  }, [status, router]);
++  }, [initialData]);
+ 
+-  // 处理加载状态
+-  if (status === "loading" || isLoading) {
+-    return <div className="p-8 text-center">正在验证身份...</div>;
+-  }
++  // 获取提醒数据
++  useEffect(() => {
++    const fetchAlerts = async () => {
++      try {
++        const response = await fetch('/api/alerts');
++        if (response.ok) {
++          const data = await response.json();
++          setAlerts(data);
++        } else {
++          console.error('获取提醒失败');
++        }
++      } catch (error) {
++        console.error('获取提醒出错:', error);
++      }
++    };
+ 
+-  // 如果会话未加载完成或未认证，显示空内容等待重定向
+-  if (!session?.user) {
+-    return null;
+-  }
++    fetchAlerts();
++    
++    if (!initialData) {
++      const fetchStatistics = async () => {
++        try {
++          // 这里实际项目中应当有一个专门的API获取统计数据
++          // 这里仅作示例
++          setStatistics({
++            totalOrders: 124,
++            inProduction: 38,
++            pendingShipment: 27,
++            completed: 76
++          });
++        } catch (error) {
++          console.error('获取统计数据出错:', error);
++        } finally {
++          setIsLoading(false);
++        }
++      };
++      
++      fetchStatistics();
++    }
++  }, [initialData]);
++
++  // 处理关闭提醒
++  const handleDismissAlert = (id: string) => {
++    setAlerts(alerts.filter(alert => alert.id !== id));
++    toast({
++      title: "提醒已关闭",
++      description: "该提醒已从列表中移除",
++    });
++  };
++
++  // 处理已读提醒
++  const handleMarkAlertRead = async (id: string) => {
++    try {
++      // 实际应用中应当有一个API来标记已读
++      // 这里仅作示例
++      const updatedAlerts = alerts.map(alert => 
++        alert.id === id ? { ...alert, isNew: false } : alert
++      );
++      setAlerts(updatedAlerts);
++    } catch (error) {
++      console.error('标记已读失败:', error);
++    }
++  };
++
++  // 处理查看所有提醒
++  const handleViewAllAlerts = () => {
++    router.push('/dashboard/notifications');
++  };
+ 
+   return (
+-    <div className="space-y-6">
+-      <Heading
+-        title="欢迎使用安钢球墨铸铁管订单管理系统"
+-        description={`你好，${session.user.name || session.user.email}，请从左侧菜单选择功能。`}
+-      />
+-      
+-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+-        <Card>
++    <div className="flex-1 space-y-4 p-4 pt-6">
++      <div className="flex items-center justify-between">
++        <h2 className="text-3xl font-bold tracking-tight">仪表盘</h2>
++        <div className="flex items-center gap-2">
++          <Button 
++            variant="outline" 
++            size="sm" 
++            onClick={() => router.refresh()}
++          >
++            <RefreshCw className="h-4 w-4 mr-2" />
++            刷新
++          </Button>
++        </div>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
++        {isLoading ? (
++          <>
++            <Skeleton className="h-[120px] w-full" />
++            <Skeleton className="h-[120px] w-full" />
++            <Skeleton className="h-[120px] w-full" />
++            <Skeleton className="h-[120px] w-full" />
++          </>
++        ) : (
++          <>
++            <Card>
++              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
++                <CardTitle className="text-sm font-medium">总订单数</CardTitle>
++                <FileBarChart className="h-4 w-4 text-muted-foreground" />
++              </CardHeader>
++              <CardContent>
++                <div className="text-2xl font-bold">{statistics.totalOrders}</div>
++                <p className="text-xs text-muted-foreground">
++                  包含所有状态的订单
++                </p>
++              </CardContent>
++            </Card>
++            <Card>
++              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
++                <CardTitle className="text-sm font-medium">生产中</CardTitle>
++                <Factory className="h-4 w-4 text-muted-foreground" />
++              </CardHeader>
++              <CardContent>
++                <div className="text-2xl font-bold">{statistics.inProduction}</div>
++                <p className="text-xs text-muted-foreground">
++                  当前正在生产的订单
++                </p>
++              </CardContent>
++            </Card>
++            <Card>
++              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
++                <CardTitle className="text-sm font-medium">待发运</CardTitle>
++                <TruckIcon className="h-4 w-4 text-muted-foreground" />
++              </CardHeader>
++              <CardContent>
++                <div className="text-2xl font-bold">{statistics.pendingShipment}</div>
++                <p className="text-xs text-muted-foreground">
++                  待发运或部分发运
++                </p>
++              </CardContent>
++            </Card>
++            <Card>
++              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
++                <CardTitle className="text-sm font-medium">已完成</CardTitle>
++                <Package className="h-4 w-4 text-muted-foreground" />
++              </CardHeader>
++              <CardContent>
++                <div className="text-2xl font-bold">{statistics.completed}</div>
++                <p className="text-xs text-muted-foreground">
++                  已完成的订单
++                </p>
++              </CardContent>
++            </Card>
++          </>
++        )}
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
++        <Card className="lg:col-span-5">
+           <CardHeader>
+-            <CardTitle>订单管理</CardTitle>
+-            <CardDescription>管理所有客户订单</CardDescription>
++            <CardTitle>订单趋势</CardTitle>
++            <CardDescription>
++              近期订单创建和完成情况
++            </CardDescription>
+           </CardHeader>
+-          <CardContent>
+-            <Link href="/dashboard/orders">
+-              <Button>查看订单</Button>
+-            </Link>
++          <CardContent className="pl-2">
++            {isLoading ? (
++              <Skeleton className="h-[300px] w-full" />
++            ) : (
++              <Overview />
++            )}
+           </CardContent>
+         </Card>
+-        
+-        <Card>
++      
++        <div className="lg:col-span-2">
++          {isLoading ? (
++            <Skeleton className="h-[450px] w-full" />
++          ) : (
++            <SmartAlert 
++              alerts={alerts} 
++              onDismiss={handleDismissAlert}
++              onMarkRead={handleMarkAlertRead}
++              onViewAll={handleViewAllAlerts}
++            />
++          )}
++        </div>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
++        <Card className="lg:col-span-2">
+           <CardHeader>
+-            <CardTitle>生产管理</CardTitle>
+-            <CardDescription>管理生产计划与进度</CardDescription>
++            <CardTitle>近期订单</CardTitle>
++            <CardDescription>
++              最近创建和更新的订单
++            </CardDescription>
+           </CardHeader>
+           <CardContent>
+-            <Link href="/dashboard/production">
+-              <Button>查看生产</Button>
+-            </Link>
++            {isLoading ? (
++              <Skeleton className="h-[300px] w-full" />
++            ) : (
++              <RecentOrders />
++            )}
+           </CardContent>
+         </Card>
+-        
+         <Card>
+           <CardHeader>
+-            <CardTitle>发货管理</CardTitle>
+-            <CardDescription>管理订单发货与物流</CardDescription>
++            <CardTitle>待交货订单</CardTitle>
++            <CardDescription>
++              未来7天内需要交付的订单
++            </CardDescription>
+           </CardHeader>
+-          <CardContent>
+-            <Link href="/dashboard/shipping">
+-              <Button>查看发货</Button>
+-            </Link>
++          <CardContent className="pl-2">
++            {isLoading ? (
++              <Skeleton className="h-[300px] w-full" />
++            ) : (
++              <div className="space-y-4">
++                <div className="flex items-center border-b pb-2">
++                  <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
++                  <div className="grid flex-1 grid-cols-2 gap-1">
++                    <div className="text-sm font-medium">日期</div>
++                    <div className="text-sm font-medium text-right">订单数</div>
++                  </div>
++                </div>
++                <div className="space-y-2">
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">今天</div>
++                      <div className="text-sm font-medium text-right">5</div>
++                    </div>
++                  </div>
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">明天</div>
++                      <div className="text-sm font-medium text-right">3</div>
++                    </div>
++                  </div>
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">2天后</div>
++                      <div className="text-sm font-medium text-right">7</div>
++                    </div>
++                  </div>
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">3天后</div>
++                      <div className="text-sm font-medium text-right">4</div>
++                    </div>
++                  </div>
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">4天后</div>
++                      <div className="text-sm font-medium text-right">6</div>
++                    </div>
++                  </div>
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">5天后</div>
++                      <div className="text-sm font-medium text-right">2</div>
++                    </div>
++                  </div>
++                  <div className="flex items-center">
++                    <div className="grid flex-1 grid-cols-2 gap-1">
++                      <div className="text-sm">6天后</div>
++                      <div className="text-sm font-medium text-right">3</div>
++                    </div>
++                  </div>
++                </div>
++                <div className="pt-2">
++                  <Button variant="outline" size="sm" className="w-full" asChild>
++                    <a href="/dashboard/orders?view=calendar">查看日历视图</a>
++                  </Button>
++                </div>
++              </div>
++            )}
+           </CardContent>
+         </Card>
+       </div>
+diff --git a/app/(dashboard)/dashboard/orders/[id]/qrcode/page.tsx b/app/(dashboard)/dashboard/orders/[id]/qrcode/page.tsx
+new file mode 100644
+index 0000000..09b70cb
+--- /dev/null
++++ b/app/(dashboard)/dashboard/orders/[id]/qrcode/page.tsx
+@@ -0,0 +1,122 @@
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
++import { db } from "@/lib/db";
++import { withPermission } from "@/lib/rbac";
++import { redirect } from "next/navigation";
++import { Share2, Download, Printer } from "lucide-react";
++import QRCode from "react-qr-code";
++
++interface QRCodePageProps {
++  params: {
++    id: string;
++  };
++}
++
++export default async function OrderQRCodePage({ params }: QRCodePageProps) {
++  // 权限检查
++  await withPermission("orders", "view");
++
++  const order = await db.order.findUnique({
++    where: {
++      id: params.id,
++    },
++    include: {
++      customer: true,
++      subOrders: true,
++    },
++  });
++
++  if (!order) {
++    redirect("/dashboard/orders");
++  }
++
++  // 构建查询URL
++  const baseUrl = process.env.NEXTAUTH_URL || 'https://angang-order.vercel.app';
++  const queryUrl = `${baseUrl}/order/track/${order.orderNumber}`;
++
++  return (
++    <div className="flex-1 space-y-4 p-4 pt-6">
++      <div className="flex justify-between items-center">
++        <div>
++          <h2 className="text-3xl font-bold tracking-tight">订单二维码</h2>
++          <p className="text-muted-foreground">
++            订单号: {order.orderNumber}
++          </p>
++        </div>
++        <Button variant="outline" onClick={() => window.history.back()}>
++          返回
++        </Button>
++      </div>
++
++      <div className="grid gap-4 md:grid-cols-2">
++        <Card>
++          <CardHeader>
++            <CardTitle>订单二维码</CardTitle>
++            <CardDescription>
++              扫描此二维码可查询订单生产进度和发运情况
++            </CardDescription>
++          </CardHeader>
++          <CardContent className="flex justify-center py-6">
++            <div className="p-4 bg-white rounded">
++              <QRCode value={queryUrl} size={200} />
++            </div>
++          </CardContent>
++          <CardFooter className="flex justify-between">
++            <Button variant="outline">
++              <Printer className="mr-2 h-4 w-4" />
++              打印二维码
++            </Button>
++            <Button>
++              <Download className="mr-2 h-4 w-4" />
++              下载二维码
++            </Button>
++          </CardFooter>
++        </Card>
++
++        <Card>
++          <CardHeader>
++            <CardTitle>订单信息</CardTitle>
++            <CardDescription>
++              订单基本信息及跟踪链接
++            </CardDescription>
++          </CardHeader>
++          <CardContent className="space-y-4">
++            <div className="space-y-1">
++              <p className="text-sm font-medium">客户名称</p>
++              <p className="text-sm text-muted-foreground">{order.customer.name}</p>
++            </div>
++            <div className="space-y-1">
++              <p className="text-sm font-medium">订单状态</p>
++              <p className="text-sm text-muted-foreground">
++                {order.status === "DRAFT" && "草稿"}
++                {order.status === "CONFIRMED" && "已确认"}
++                {order.status === "IN_PRODUCTION" && "生产中"}
++                {order.status === "PARTIALLY_SHIPPED" && "部分发运"}
++                {order.status === "COMPLETED" && "已完成"}
++                {order.status === "CANCELED" && "已取消"}
++              </p>
++            </div>
++            <div className="space-y-1">
++              <p className="text-sm font-medium">发运方式</p>
++              <p className="text-sm text-muted-foreground">
++                {order.shippingMethod === "SELF_DELIVERY" ? "自发" : "自提"}
++              </p>
++            </div>
++            <div className="space-y-1">
++              <p className="text-sm font-medium">跟踪链接</p>
++              <p className="text-sm text-muted-foreground break-all">
++                {queryUrl}
++              </p>
++            </div>
++          </CardContent>
++          <CardFooter>
++            <Button className="w-full">
++              <Share2 className="mr-2 h-4 w-4" />
++              分享跟踪链接
++            </Button>
++          </CardFooter>
++        </Card>
++      </div>
++    </div>
++  );
++} 
+\ No newline at end of file
+diff --git a/app/(dashboard)/dashboard/orders/components/order-form.tsx b/app/(dashboard)/dashboard/orders/components/order-form.tsx
+index 642e240..e5a91bb 100644
+--- a/app/(dashboard)/dashboard/orders/components/order-form.tsx
++++ b/app/(dashboard)/dashboard/orders/components/order-form.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { useState } from "react";
++import { useEffect, useState } from "react";
+ import { useRouter } from "next/navigation";
+ import { useForm } from "react-hook-form";
+ import { zodResolver } from "@hookform/resolvers/zod";
+@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
+ import {
+   Form,
+   FormControl,
++  FormDescription,
+   FormField,
+   FormItem,
+   FormLabel,
+@@ -27,9 +28,12 @@ import { Input } from "@/components/ui/input";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+ import { orderBaseSchema } from "@/lib/request-schema";
+-import { Order } from "@prisma/client";
++import { Order, OrderStatus, ShippingMethod } from "@prisma/client";
+ import { createOrder, updateOrder } from "../actions";
+ import { SubOrderForm } from "./sub-order-form";
++import { createAuditLog } from "@/lib/create-audit-log";
++import { AlertCircle, LoaderCircle } from "lucide-react";
++import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+ 
+ type Customer = {
+   id: string;
+@@ -53,6 +57,8 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+   const router = useRouter();
+   const [isLoading, setIsLoading] = useState(false);
+   const [activeTab, setActiveTab] = useState("basic");
++  const [error, setError] = useState<string | null>(null);
++  const [originalStatus, setOriginalStatus] = useState<OrderStatus | null>(null);
+ 
+   // 创建符合类型要求的defaultValues
+   const defaultValues: FormValues = {
+@@ -61,6 +67,9 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+     shippingAddress: initialData?.shippingAddress || undefined,
+     paymentTerms: initialData?.paymentTerms || undefined,
+     notes: initialData?.notes || undefined,
++    status: initialData?.status || "DRAFT",
++    totalAmount: initialData?.totalAmount || undefined,
++    paymentStatus: initialData?.paymentStatus || undefined,
+   };
+ 
+   const form = useForm<FormValues>({
+@@ -68,15 +77,32 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+     defaultValues
+   });
+ 
++  useEffect(() => {
++    if (initialData?.status) {
++      setOriginalStatus(initialData.status);
++    }
++  }, [initialData]);
++
+   const onSubmit = async (values: FormValues) => {
+     try {
+       setIsLoading(true);
++      setError(null);
+       
+       if (initialData) {
+         // 更新订单
+         const result = await updateOrder(initialData.id, values);
+         if (result.success) {
+           toast.success("订单更新成功");
++          
++          if (originalStatus !== values.status) {
++            await createAuditLog({
++              action: "update_status",
++              resource: "order",
++              resourceId: initialData.id,
++              description: `订单状态从 ${getStatusLabel(originalStatus)} 变更为 ${getStatusLabel(values.status)}`,
++            });
++          }
++          
+           router.push("/dashboard/orders");
+           router.refresh();
+         } else {
+@@ -93,7 +119,8 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+           toast.error(result.error || "订单创建失败");
+         }
+       }
+-    } catch (error) {
++    } catch (error: any) {
++      setError(error.message || "操作失败，请稍后重试");
+       toast.error("操作失败，请稍后重试");
+       console.error(error);
+     } finally {
+@@ -101,6 +128,24 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+     }
+   };
+ 
++  // 获取状态显示标签
++  function getStatusLabel(status: OrderStatus | null): string {
++    if (!status) return "";
++    const option = statusOptions.find(opt => opt.value === status);
++    return option ? option.label : status;
++  }
++
++  // 当发运方式变更时的逻辑
++  const handleShippingMethodChange = (value: string) => {
++    const method = value as ShippingMethod;
++    form.setValue("shippingMethod", method);
++    
++    // 如果是客户自提，清空发运地址
++    if (method === ShippingMethod.CUSTOMER_PICKUP) {
++      form.setValue("shippingAddress", "");
++    }
++  };
++
+   return (
+     <div className="space-y-6">
+       <Tabs defaultValue="basic" value={activeTab} onValueChange={setActiveTab}>
+@@ -114,6 +159,14 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+         <TabsContent value="basic" className="space-y-4 pt-4">
+           <Form {...form}>
+             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
++              {error && (
++                <Alert variant="destructive">
++                  <AlertCircle className="h-4 w-4" />
++                  <AlertTitle>错误</AlertTitle>
++                  <AlertDescription>{error}</AlertDescription>
++                </Alert>
++              )}
++
+               <Card>
+                 <CardHeader>
+                   <CardTitle>订单基本信息</CardTitle>
+@@ -144,6 +197,37 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                             ))}
+                           </SelectContent>
+                         </Select>
++                        <FormDescription>选择订单所属客户</FormDescription>
++                        <FormMessage />
++                      </FormItem>
++                    )}
++                  />
++                  
++                  <FormField
++                    control={form.control}
++                    name="status"
++                    render={({ field }) => (
++                      <FormItem>
++                        <FormLabel>订单状态</FormLabel>
++                        <Select
++                          disabled={isLoading}
++                          onValueChange={field.onChange}
++                          value={field.value}
++                        >
++                          <FormControl>
++                            <SelectTrigger>
++                              <SelectValue placeholder="选择状态" />
++                            </SelectTrigger>
++                          </FormControl>
++                          <SelectContent>
++                            {statusOptions.map((option) => (
++                              <SelectItem key={option.value} value={option.value}>
++                                {option.label}
++                              </SelectItem>
++                            ))}
++                          </SelectContent>
++                        </Select>
++                        <FormDescription>订单当前处理状态</FormDescription>
+                         <FormMessage />
+                       </FormItem>
+                     )}
+@@ -157,9 +241,8 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                         <FormLabel>发运方式</FormLabel>
+                         <Select
+                           disabled={isLoading}
+-                          onValueChange={field.onChange}
++                          onValueChange={handleShippingMethodChange}
+                           value={field.value}
+-                          defaultValue={field.value}
+                         >
+                           <FormControl>
+                             <SelectTrigger>
+@@ -167,10 +250,16 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                             </SelectTrigger>
+                           </FormControl>
+                           <SelectContent>
+-                            <SelectItem value="SELF_DELIVERY">厂家送货</SelectItem>
+-                            <SelectItem value="CUSTOMER_PICKUP">客户自提</SelectItem>
++                            {shippingMethodOptions.map((option) => (
++                              <SelectItem key={option.value} value={option.value}>
++                                {option.label}
++                              </SelectItem>
++                            ))}
+                           </SelectContent>
+                         </Select>
++                        <FormDescription>
++                          选择订单的发运方式
++                        </FormDescription>
+                         <FormMessage />
+                       </FormItem>
+                     )}
+@@ -181,10 +270,20 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                     name="shippingAddress"
+                     render={({ field }) => (
+                       <FormItem>
+-                        <FormLabel>送货地址</FormLabel>
++                        <FormLabel>发运地址</FormLabel>
+                         <FormControl>
+-                          <Input disabled={isLoading} {...field} />
++                          <Textarea
++                            placeholder="输入发运地址..."
++                            className="resize-none"
++                            {...field}
++                            disabled={isLoading || form.getValues("shippingMethod") === ShippingMethod.CUSTOMER_PICKUP}
++                          />
+                         </FormControl>
++                        <FormDescription>
++                          {form.getValues("shippingMethod") === ShippingMethod.CUSTOMER_PICKUP 
++                            ? "客户自提无需填写发运地址" 
++                            : "自发运需要填写发运地址"}
++                        </FormDescription>
+                         <FormMessage />
+                       </FormItem>
+                     )}
+@@ -197,8 +296,9 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                       <FormItem>
+                         <FormLabel>付款条款</FormLabel>
+                         <FormControl>
+-                          <Input disabled={isLoading} {...field} />
++                          <Input placeholder="输入付款条款..." {...field} />
+                         </FormControl>
++                        <FormDescription>例如: 30天付款期</FormDescription>
+                         <FormMessage />
+                       </FormItem>
+                     )}
+@@ -206,14 +306,48 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                   
+                   <FormField
+                     control={form.control}
+-                    name="notes"
++                    name="totalAmount"
+                     render={({ field }) => (
+                       <FormItem>
++                        <FormLabel>总金额</FormLabel>
++                        <FormControl>
++                          <Input
++                            type="number"
++                            placeholder="输入总金额..."
++                            {...field}
++                          />
++                        </FormControl>
++                        <FormDescription>订单总金额（元）</FormDescription>
++                        <FormMessage />
++                      </FormItem>
++                    )}
++                  />
++                  
++                  <FormField
++                    control={form.control}
++                    name="paymentStatus"
++                    render={({ field }) => (
++                      <FormItem>
++                        <FormLabel>付款状态</FormLabel>
++                        <FormControl>
++                          <Input placeholder="输入付款状态..." {...field} />
++                        </FormControl>
++                        <FormDescription>例如: 已付款、部分付款、未付款</FormDescription>
++                        <FormMessage />
++                      </FormItem>
++                    )}
++                  />
++                  
++                  <FormField
++                    control={form.control}
++                    name="notes"
++                    render={({ field }) => (
++                      <FormItem className="md:col-span-2">
+                         <FormLabel>备注</FormLabel>
+                         <FormControl>
+                           <Textarea
+-                            disabled={isLoading}
+-                            placeholder="输入订单备注信息"
++                            placeholder="输入备注信息..."
++                            className="resize-none"
+                             {...field}
+                           />
+                         </FormControl>
+@@ -234,7 +368,14 @@ export function OrderForm({ initialData, customers }: OrderFormProps) {
+                   取消
+                 </Button>
+                 <Button disabled={isLoading} type="submit">
+-                  {initialData ? "更新订单" : "创建订单"}
++                  {isLoading ? (
++                    <>
++                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
++                      处理中...
++                    </>
++                  ) : (
++                    initialData ? "更新订单" : "创建订单"
++                  )}
+                 </Button>
+               </div>
+             </form>
+diff --git a/app/(dashboard)/dashboard/orders/components/orders-table.tsx b/app/(dashboard)/dashboard/orders/components/orders-table.tsx
+index 8051f55..b996204 100644
+--- a/app/(dashboard)/dashboard/orders/components/orders-table.tsx
++++ b/app/(dashboard)/dashboard/orders/components/orders-table.tsx
+@@ -14,6 +14,16 @@ import { PencilIcon, EyeIcon, TrashIcon } from "lucide-react";
+ import Link from "next/link";
+ import { Badge } from "@/components/ui/badge";
+ import { formatDate } from "@/lib/utils";
++import { QrCode } from "lucide-react";
++import {
++  DropdownMenu,
++  DropdownMenuContent,
++  DropdownMenuItem,
++  DropdownMenuLabel,
++  DropdownMenuSeparator,
++  DropdownMenuTrigger,
++} from "@/components/ui/dropdown-menu";
++import { MoreHorizontal } from "lucide-react";
+ 
+ type OrderWithCustomer = Order & {
+   customer: {
+@@ -47,88 +57,88 @@ export function OrdersTable({
+   };
+ 
+   return (
+-    <div className="rounded-md border">
+-      <Table>
+-        <TableHeader>
+-          <TableRow>
+-            <TableHead>订单编号</TableHead>
+-            <TableHead>客户</TableHead>
+-            <TableHead>状态</TableHead>
+-            <TableHead>创建日期</TableHead>
+-            <TableHead>总金额</TableHead>
+-            <TableHead>发运方式</TableHead>
+-            <TableHead className="text-right">操作</TableHead>
+-          </TableRow>
+-        </TableHeader>
+-        <TableBody>
+-          {orders.length === 0 && (
++    <div className="space-y-4">
++      <div className="rounded-md border">
++        <Table>
++          <TableHeader>
+             <TableRow>
+-              <TableCell colSpan={7} className="h-24 text-center">
+-                暂无订单数据
+-              </TableCell>
++              <TableHead>订单编号</TableHead>
++              <TableHead>客户</TableHead>
++              <TableHead>状态</TableHead>
++              <TableHead>创建日期</TableHead>
++              <TableHead>总金额</TableHead>
++              <TableHead>发运方式</TableHead>
++              <TableHead className="text-right">操作</TableHead>
+             </TableRow>
+-          )}
+-          {orders.map((order) => {
+-            const status = getStatusText(order.status);
+-            return (
+-              <TableRow key={order.id}>
+-                <TableCell className="font-medium">
+-                  {order.orderNumber}
+-                </TableCell>
+-                <TableCell>{order.customer.name}</TableCell>
+-                <TableCell>
+-                  <Badge variant={status.variant as any}>{status.text}</Badge>
+-                </TableCell>
+-                <TableCell>{formatDate(order.createdAt)}</TableCell>
+-                <TableCell>
+-                  {order.totalAmount
+-                    ? `¥${order.totalAmount.toLocaleString()}`
+-                    : "未定价"}
+-                </TableCell>
+-                <TableCell>
+-                  {order.shippingMethod === "SELF_DELIVERY"
+-                    ? "厂家送货"
+-                    : "客户自提"}
+-                </TableCell>
+-                <TableCell className="text-right">
+-                  <div className="flex justify-end gap-2">
+-                    <Button
+-                      variant="ghost"
+-                      size="sm"
+-                      asChild
+-                      className="h-8 w-8 p-0"
+-                    >
+-                      <Link href={`/dashboard/orders/${order.id}`}>
+-                        <EyeIcon className="h-4 w-4" />
+-                        <span className="sr-only">查看</span>
+-                      </Link>
+-                    </Button>
+-                    <Button
+-                      variant="ghost"
+-                      size="sm"
+-                      asChild
+-                      className="h-8 w-8 p-0"
+-                    >
+-                      <Link href={`/dashboard/orders/${order.id}/edit`}>
+-                        <PencilIcon className="h-4 w-4" />
+-                        <span className="sr-only">编辑</span>
+-                      </Link>
+-                    </Button>
+-                    <Button
+-                      variant="ghost"
+-                      size="sm"
+-                      className="h-8 w-8 p-0 text-destructive"
+-                    >
+-                      <TrashIcon className="h-4 w-4" />
+-                      <span className="sr-only">删除</span>
+-                    </Button>
+-                  </div>
++          </TableHeader>
++          <TableBody>
++            {orders.length === 0 && (
++              <TableRow>
++                <TableCell colSpan={7} className="h-24 text-center">
++                  暂无订单数据
+                 </TableCell>
+               </TableRow>
+-            );
+-          })}
+-        </TableBody>
+-      </Table>
++            )}
++            {orders.map((order) => {
++              const status = getStatusText(order.status);
++              return (
++                <TableRow key={order.id}>
++                  <TableCell className="font-medium">
++                    <Link href={`/dashboard/orders/${order.id}`} className="hover:underline">
++                      {order.orderNumber}
++                    </Link>
++                  </TableCell>
++                  <TableCell>{order.customer.name}</TableCell>
++                  <TableCell>
++                    <Badge variant={status.variant as any}>{status.text}</Badge>
++                  </TableCell>
++                  <TableCell>{formatDate(order.createdAt)}</TableCell>
++                  <TableCell>
++                    {order.totalAmount
++                      ? `¥${order.totalAmount.toLocaleString()}`
++                      : "未定价"}
++                  </TableCell>
++                  <TableCell>
++                    {order.shippingMethod === "SELF_DELIVERY"
++                      ? "厂家送货"
++                      : "客户自提"}
++                  </TableCell>
++                  <TableCell className="text-right">
++                    <DropdownMenu>
++                      <DropdownMenuTrigger asChild>
++                        <Button variant="ghost" className="h-8 w-8 p-0">
++                          <span className="sr-only">打开菜单</span>
++                          <MoreHorizontal className="h-4 w-4" />
++                        </Button>
++                      </DropdownMenuTrigger>
++                      <DropdownMenuContent align="end">
++                        <DropdownMenuLabel>操作</DropdownMenuLabel>
++                        <DropdownMenuItem asChild>
++                          <Link href={`/dashboard/orders/${order.id}`}>
++                            <EyeIcon className="mr-2 h-4 w-4" />
++                            查看详情
++                          </Link>
++                        </DropdownMenuItem>
++                        <DropdownMenuItem asChild>
++                          <Link href={`/dashboard/orders/${order.id}/qrcode`}>
++                            <QrCode className="mr-2 h-4 w-4" />
++                            查看二维码
++                          </Link>
++                        </DropdownMenuItem>
++                        <DropdownMenuSeparator />
++                        <DropdownMenuItem>
++                          <TrashIcon className="mr-2 h-4 w-4" />
++                          删除订单
++                        </DropdownMenuItem>
++                      </DropdownMenuContent>
++                    </DropdownMenu>
++                  </TableCell>
++                </TableRow>
++              );
++            })}
++          </TableBody>
++        </Table>
++      </div>
+     </div>
+   );
+ } 
+\ No newline at end of file
+diff --git a/app/(dashboard)/dashboard/orders/components/sub-order-form.tsx b/app/(dashboard)/dashboard/orders/components/sub-order-form.tsx
+index 5712864..bde132a 100644
+--- a/app/(dashboard)/dashboard/orders/components/sub-order-form.tsx
++++ b/app/(dashboard)/dashboard/orders/components/sub-order-form.tsx
+@@ -31,6 +31,9 @@ import { cn, formatDate } from "@/lib/utils";
+ import { CalendarIcon } from "lucide-react";
+ import { subOrderSchema } from "@/lib/request-schema";
+ import { createSubOrder, getDropdownData } from "../actions";
++import { Label as UILabel } from "@/components/ui/label";
++import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
++import { ProductionLineType, PriorityLevel } from "@prisma/client";
+ 
+ interface SubOrderFormProps {
+   orderId: string;
+@@ -41,6 +44,22 @@ type DropdownOption = {
+   value: string;
+ };
+ 
++// 优先级选项
++const priorityOptions = [
++  { value: PriorityLevel.LOW, label: "低" },
++  { value: PriorityLevel.NORMAL, label: "正常" },
++  { value: PriorityLevel.HIGH, label: "高" },
++  { value: PriorityLevel.URGENT, label: "紧急" },
++  { value: PriorityLevel.CRITICAL, label: "关键" },
++];
++
++// 产线选项
++const productionLineOptions = [
++  { value: ProductionLineType.WORKSHOP_ONE, label: "一车间" },
++  { value: ProductionLineType.WORKSHOP_TWO, label: "二车间" },
++  { value: ProductionLineType.WORKSHOP_THREE, label: "三车间" },
++];
++
+ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+   const router = useRouter();
+   const [isLoading, setIsLoading] = useState(false);
+@@ -175,24 +194,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                   render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>规格</FormLabel>
+-                      <Select
+-                        disabled={isLoading}
+-                        onValueChange={field.onChange}
+-                        value={field.value}
+-                      >
+-                        <FormControl>
+-                          <SelectTrigger>
+-                            <SelectValue placeholder="选择规格" />
+-                          </SelectTrigger>
+-                        </FormControl>
+-                        <SelectContent>
+-                          {dropdownData.specifications.map((spec) => (
+-                            <SelectItem key={spec.id} value={spec.value}>
+-                              {spec.value}
+-                            </SelectItem>
+-                          ))}
+-                        </SelectContent>
+-                      </Select>
++                      <Popover>
++                        <PopoverTrigger asChild>
++                          <Button
++                            variant="outline"
++                            role="combobox"
++                            className="w-full justify-between"
++                          >
++                            {field.value ? field.value : "选择规格..."}
++                          </Button>
++                        </PopoverTrigger>
++                        <PopoverContent className="p-0" align="start" side="bottom">
++                          <Command>
++                            <CommandInput placeholder="搜索规格..." />
++                            <CommandList>
++                              <CommandEmpty>未找到规格</CommandEmpty>
++                              <CommandGroup>
++                                {dropdownData.specifications.map((spec) => (
++                                  <CommandItem
++                                    key={spec.id}
++                                    value={spec.value}
++                                    onSelect={() => field.onChange(spec.value)}
++                                  >
++                                    {spec.value}
++                                  </CommandItem>
++                                ))}
++                              </CommandGroup>
++                            </CommandList>
++                          </Command>
++                        </PopoverContent>
++                      </Popover>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+@@ -204,24 +235,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                   render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>级别</FormLabel>
+-                      <Select
+-                        disabled={isLoading}
+-                        onValueChange={field.onChange}
+-                        value={field.value}
+-                      >
+-                        <FormControl>
+-                          <SelectTrigger>
+-                            <SelectValue placeholder="选择级别" />
+-                          </SelectTrigger>
+-                        </FormControl>
+-                        <SelectContent>
+-                          {dropdownData.grades.map((grade) => (
+-                            <SelectItem key={grade.id} value={grade.value}>
+-                              {grade.value}
+-                            </SelectItem>
+-                          ))}
+-                        </SelectContent>
+-                      </Select>
++                      <Popover>
++                        <PopoverTrigger asChild>
++                          <Button
++                            variant="outline"
++                            role="combobox"
++                            className="w-full justify-between"
++                          >
++                            {field.value ? field.value : "选择级别..."}
++                          </Button>
++                        </PopoverTrigger>
++                        <PopoverContent className="p-0" align="start" side="bottom">
++                          <Command>
++                            <CommandInput placeholder="搜索级别..." />
++                            <CommandList>
++                              <CommandEmpty>未找到级别</CommandEmpty>
++                              <CommandGroup>
++                                {dropdownData.grades.map((grade) => (
++                                  <CommandItem
++                                    key={grade.id}
++                                    value={grade.value}
++                                    onSelect={() => field.onChange(grade.value)}
++                                  >
++                                    {grade.value}
++                                  </CommandItem>
++                                ))}
++                              </CommandGroup>
++                            </CommandList>
++                          </Command>
++                        </PopoverContent>
++                      </Popover>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+@@ -233,24 +276,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                   render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>接口形式</FormLabel>
+-                      <Select
+-                        disabled={isLoading}
+-                        onValueChange={field.onChange}
+-                        value={field.value}
+-                      >
+-                        <FormControl>
+-                          <SelectTrigger>
+-                            <SelectValue placeholder="选择接口形式" />
+-                          </SelectTrigger>
+-                        </FormControl>
+-                        <SelectContent>
+-                          {dropdownData.interfaceTypes.map((type) => (
+-                            <SelectItem key={type.id} value={type.value}>
+-                              {type.value}
+-                            </SelectItem>
+-                          ))}
+-                        </SelectContent>
+-                      </Select>
++                      <Popover>
++                        <PopoverTrigger asChild>
++                          <Button
++                            variant="outline"
++                            role="combobox"
++                            className="w-full justify-between"
++                          >
++                            {field.value ? field.value : "选择接口形式..."}
++                          </Button>
++                        </PopoverTrigger>
++                        <PopoverContent className="p-0" align="start" side="bottom">
++                          <Command>
++                            <CommandInput placeholder="搜索接口形式..." />
++                            <CommandList>
++                              <CommandEmpty>未找到接口形式</CommandEmpty>
++                              <CommandGroup>
++                                {dropdownData.interfaceTypes.map((type) => (
++                                  <CommandItem
++                                    key={type.id}
++                                    value={type.value}
++                                    onSelect={() => field.onChange(type.value)}
++                                  >
++                                    {type.value}
++                                  </CommandItem>
++                                ))}
++                              </CommandGroup>
++                            </CommandList>
++                          </Command>
++                        </PopoverContent>
++                      </Popover>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+@@ -262,24 +317,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                   render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>内衬</FormLabel>
+-                      <Select
+-                        disabled={isLoading}
+-                        onValueChange={field.onChange}
+-                        value={field.value}
+-                      >
+-                        <FormControl>
+-                          <SelectTrigger>
+-                            <SelectValue placeholder="选择内衬" />
+-                          </SelectTrigger>
+-                        </FormControl>
+-                        <SelectContent>
+-                          {dropdownData.linings.map((lining) => (
+-                            <SelectItem key={lining.id} value={lining.value}>
+-                              {lining.value}
+-                            </SelectItem>
+-                          ))}
+-                        </SelectContent>
+-                      </Select>
++                      <Popover>
++                        <PopoverTrigger asChild>
++                          <Button
++                            variant="outline"
++                            role="combobox"
++                            className="w-full justify-between"
++                          >
++                            {field.value ? field.value : "选择内衬..."}
++                          </Button>
++                        </PopoverTrigger>
++                        <PopoverContent className="p-0" align="start" side="bottom">
++                          <Command>
++                            <CommandInput placeholder="搜索内衬..." />
++                            <CommandList>
++                              <CommandEmpty>未找到内衬</CommandEmpty>
++                              <CommandGroup>
++                                {dropdownData.linings.map((lining) => (
++                                  <CommandItem
++                                    key={lining.id}
++                                    value={lining.value}
++                                    onSelect={() => field.onChange(lining.value)}
++                                  >
++                                    {lining.value}
++                                  </CommandItem>
++                                ))}
++                              </CommandGroup>
++                            </CommandList>
++                          </Command>
++                        </PopoverContent>
++                      </Popover>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+@@ -291,24 +358,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                   render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>长度</FormLabel>
+-                      <Select
+-                        disabled={isLoading}
+-                        onValueChange={field.onChange}
+-                        value={field.value}
+-                      >
+-                        <FormControl>
+-                          <SelectTrigger>
+-                            <SelectValue placeholder="选择长度" />
+-                          </SelectTrigger>
+-                        </FormControl>
+-                        <SelectContent>
+-                          {dropdownData.lengths.map((length) => (
+-                            <SelectItem key={length.id} value={length.value}>
+-                              {length.value}
+-                            </SelectItem>
+-                          ))}
+-                        </SelectContent>
+-                      </Select>
++                      <Popover>
++                        <PopoverTrigger asChild>
++                          <Button
++                            variant="outline"
++                            role="combobox"
++                            className="w-full justify-between"
++                          >
++                            {field.value ? field.value : "选择长度..."}
++                          </Button>
++                        </PopoverTrigger>
++                        <PopoverContent className="p-0" align="start" side="bottom">
++                          <Command>
++                            <CommandInput placeholder="搜索长度..." />
++                            <CommandList>
++                              <CommandEmpty>未找到长度</CommandEmpty>
++                              <CommandGroup>
++                                {dropdownData.lengths.map((length) => (
++                                  <CommandItem
++                                    key={length.id}
++                                    value={length.value}
++                                    onSelect={() => field.onChange(length.value)}
++                                  >
++                                    {length.value}
++                                  </CommandItem>
++                                ))}
++                              </CommandGroup>
++                            </CommandList>
++                          </Command>
++                        </PopoverContent>
++                      </Popover>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+@@ -320,24 +399,36 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                   render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>防腐</FormLabel>
+-                      <Select
+-                        disabled={isLoading}
+-                        onValueChange={field.onChange}
+-                        value={field.value}
+-                      >
+-                        <FormControl>
+-                          <SelectTrigger>
+-                            <SelectValue placeholder="选择防腐" />
+-                          </SelectTrigger>
+-                        </FormControl>
+-                        <SelectContent>
+-                          {dropdownData.anticorrosions.map((anti) => (
+-                            <SelectItem key={anti.id} value={anti.value}>
+-                              {anti.value}
+-                            </SelectItem>
+-                          ))}
+-                        </SelectContent>
+-                      </Select>
++                      <Popover>
++                        <PopoverTrigger asChild>
++                          <Button
++                            variant="outline"
++                            role="combobox"
++                            className="w-full justify-between"
++                          >
++                            {field.value ? field.value : "选择防腐措施..."}
++                          </Button>
++                        </PopoverTrigger>
++                        <PopoverContent className="p-0" align="start" side="bottom">
++                          <Command>
++                            <CommandInput placeholder="搜索防腐措施..." />
++                            <CommandList>
++                              <CommandEmpty>未找到防腐措施</CommandEmpty>
++                              <CommandGroup>
++                                {dropdownData.anticorrosions.map((anti) => (
++                                  <CommandItem
++                                    key={anti.id}
++                                    value={anti.value}
++                                    onSelect={() => field.onChange(anti.value)}
++                                  >
++                                    {anti.value}
++                                  </CommandItem>
++                                ))}
++                              </CommandGroup>
++                            </CommandList>
++                          </Command>
++                        </PopoverContent>
++                      </Popover>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+@@ -390,22 +481,20 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                       <FormLabel>交货日期</FormLabel>
+                       <Popover>
+                         <PopoverTrigger asChild>
+-                          <FormControl>
+-                            <Button
+-                              variant="outline"
+-                              className={cn(
+-                                "w-full pl-3 text-left font-normal",
+-                                !field.value && "text-muted-foreground"
+-                              )}
+-                            >
+-                              {field.value ? (
+-                                formatDate(field.value)
+-                              ) : (
+-                                <span>选择日期</span>
+-                              )}
+-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+-                            </Button>
+-                          </FormControl>
++                          <Button
++                            variant="outline"
++                            className={cn(
++                              "w-full pl-3 text-left font-normal",
++                              !field.value && "text-muted-foreground"
++                            )}
++                          >
++                            {field.value ? (
++                              formatDate(field.value)
++                            ) : (
++                              <span>选择日期</span>
++                            )}
++                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
++                          </Button>
+                         </PopoverTrigger>
+                         <PopoverContent className="w-auto p-0" align="start">
+                           <Calendar
+@@ -442,9 +531,11 @@ export function SubOrderForm({ orderId }: SubOrderFormProps) {
+                           </SelectTrigger>
+                         </FormControl>
+                         <SelectContent>
+-                          <SelectItem value="NORMAL">正常</SelectItem>
+-                          <SelectItem value="URGENT">紧急</SelectItem>
+-                          <SelectItem value="CRITICAL">特急</SelectItem>
++                          {priorityOptions.map((option) => (
++                            <SelectItem key={option.value} value={option.value}>
++                              {option.label}
++                            </SelectItem>
++                          ))}
+                         </SelectContent>
+                       </Select>
+                       <FormMessage />
+diff --git a/app/(dashboard)/dashboard/page.tsx b/app/(dashboard)/dashboard/page.tsx
+index bca5543..2917357 100644
+--- a/app/(dashboard)/dashboard/page.tsx
++++ b/app/(dashboard)/dashboard/page.tsx
+@@ -1,15 +1,88 @@
+-import { Heading } from "@/components/ui/heading";
+-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+-import { Button } from "@/components/ui/button";
+-import Link from "next/link";
+-import { Suspense } from "react";
+-import DashboardClient from "./dashboard-client";
++import { Metadata } from "next";
++import { DashboardClient } from "./dashboard-client";
++import { auth } from "@/lib/auth";
++import { redirect } from "next/navigation";
++import { db } from "@/lib/db";
+ 
+-// 使用静态页面包装动态的client组件
+-export default function DashboardPage() {
+-  return (
+-    <Suspense fallback={<div className="p-8 text-center">正在加载仪表盘...</div>}>
+-      <DashboardClient />
+-    </Suspense>
+-  );
++export const metadata: Metadata = {
++  title: "仪表盘 | 安钢集团永通球墨铸铁管有限责任公司",
++  description: "系统仪表盘，查看关键统计数据和待办事项",
++};
++
++export default async function DashboardPage() {
++  // 验证用户是否已登录
++  const session = await auth();
++  
++  if (!session?.user?.id) {
++    redirect("/login");
++  }
++  
++  // 获取用户信息
++  const user = await db.user.findUnique({
++    where: {
++      id: session.user.id,
++    },
++    select: {
++      id: true,
++      name: true,
++      email: true,
++      role: true,
++    },
++  });
++  
++  if (!user) {
++    redirect("/login");
++  }
++  
++  // 获取简略的统计数据（详细统计将在客户端获取）
++  const orderStatistics = await getOrderStatistics();
++  
++  return <DashboardClient initialData={orderStatistics} />;
++}
++
++// 获取订单统计数据
++async function getOrderStatistics() {
++  try {
++    // 获取订单总数
++    const totalOrders = await db.order.count();
++    
++    // 获取生产中订单数
++    const inProduction = await db.order.count({
++      where: {
++        status: "IN_PRODUCTION",
++      },
++    });
++    
++    // 获取待发运或部分发运订单数
++    const pendingShipment = await db.order.count({
++      where: {
++        OR: [
++          { status: "IN_PRODUCTION" },
++          { status: "PARTIALLY_SHIPPED" },
++        ],
++      },
++    });
++    
++    // 获取已完成订单数
++    const completed = await db.order.count({
++      where: {
++        status: "COMPLETED",
++      },
++    });
++    
++    return {
++      totalOrders,
++      inProduction,
++      pendingShipment,
++      completed,
++    };
++  } catch (error) {
++    console.error("获取订单统计数据失败:", error);
++    return {
++      totalOrders: 0,
++      inProduction: 0,
++      pendingShipment: 0,
++      completed: 0,
++    };
++  }
+ } 
+\ No newline at end of file
+diff --git a/app/(dashboard)/dashboard/production/actions.ts b/app/(dashboard)/dashboard/production/actions.ts
+index 3004f0d..615af0f 100644
+--- a/app/(dashboard)/dashboard/production/actions.ts
++++ b/app/(dashboard)/dashboard/production/actions.ts
+@@ -7,6 +7,10 @@ import { auth } from "@/lib/auth";
+ import { redirect } from "next/navigation";
+ import { ProductionStatus, ShiftType, TeamType } from "@prisma/client";
+ import { z } from "zod";
++import { ProductionFormValues } from "./components/production-form";
++import { OrderStatus } from "@prisma/client";
++import { getCurrentUser } from "@/lib/session";
++import { createAuditLog } from "@/lib/create-audit-log";
+ 
+ // 获取所有生产记录
+ export async function getProductions(): Promise<ProductionWithDetails[]> {
+@@ -78,24 +82,19 @@ const productionFormSchema = z.object({
+ export type ProductionFormValues = z.infer<typeof productionFormSchema>;
+ 
+ // 创建生产记录
+-export async function createProduction(values: ProductionFormValues) {
++export async function createProduction(data: ProductionFormValues) {
+   try {
+-    const session = await auth();
+-    const userId = session?.user?.id;
+-
+-    if (!userId) {
+-      redirect("/login");
+-    }
+-
+-    const result = productionFormSchema.safeParse(values);
+-    
+-    if (!result.success) {
+-      return { error: "表单数据验证失败" };
++    // 获取当前用户
++    const user = await getCurrentUser();
++    if (!user) {
++      return { success: false, message: "未授权操作" };
+     }
+ 
+-    // 获取子订单信息
++    // 获取子订单详情
+     const subOrder = await db.subOrder.findUnique({
+-      where: { id: values.subOrderId },
++      where: {
++        id: data.subOrderId,
++      },
+       include: {
+         order: true,
+         production: true,
+@@ -103,102 +102,69 @@ export async function createProduction(values: ProductionFormValues) {
+     });
+ 
+     if (!subOrder) {
+-      return { error: "订单项目不存在" };
+-    }
+-
+-    // 计算已生产数量
+-    const existingProduction = subOrder.production || [];
+-    const totalProduced = existingProduction.reduce((sum, p) => sum + p.quantity, 0);
+-    const remainingQuantity = subOrder.plannedQuantity - totalProduced;
+-
+-    if (values.quantity > remainingQuantity) {
+-      return { error: `生产数量超过计划数量，剩余可生产: ${remainingQuantity}` };
++      return { success: false, message: "无效的子订单ID" };
+     }
+ 
+-    // 状态映射 - 将前端状态映射为数据库有效的状态
+-    let dbStatus;
+-    if (values.status === "COMPLETED") {
+-      dbStatus = "FINISHED";
+-    } else if (values.status === "PAUSED") {
+-      dbStatus = "NOT_STARTED"; // 或其他合适的值
+-    } else {
+-      dbStatus = values.status; // NOT_STARTED 或 IN_PROGRESS 不需要映射
++    // 判断生产数量是否合理
++    const producedQuantity = subOrder.production.reduce(
++      (sum, prod) => sum + prod.quantity,
++      0
++    );
++    const remainingQuantity = subOrder.plannedQuantity - producedQuantity;
++
++    if (data.quantity > remainingQuantity) {
++      return {
++        success: false,
++        message: `生产支数不能超过剩余计划支数 ${remainingQuantity}`,
++      };
+     }
+ 
+     // 创建生产记录
+-    await db.production.create({
++    const production = await db.production.create({
+       data: {
+-        status: dbStatus as ProductionStatus,
+-        team: values.team,
+-        shift: values.shift,
+-        quantity: values.quantity,
+-        startTime: values.startTime ? new Date(values.startTime) : null,
+-        endTime: values.endTime ? new Date(values.endTime) : null,
+-        notes: values.notes,
+-        userId,
+-        subOrderId: values.subOrderId,
+-        productionLineId: subOrder.productionLineId || "",
+-        productionDate: new Date(),
++        subOrderId: data.subOrderId,
++        productionLineId: data.productionLineId,
++        userId: user.id,
++        team: data.team,
++        shift: data.shift,
++        productionDate: data.productionDate,
++        quantity: data.quantity,
++        status: ProductionStatus.FINISHED,
++        startTime: data.startTime,
++        endTime: data.endTime,
++        qualityNotes: data.qualityNotes,
++        materialUsage: data.materialUsage,
++        notes: data.notes,
+       },
+     });
+ 
+-    // 检查是否需要更新订单状态
+-    const newTotalProduced = totalProduced + values.quantity;
+-    if (newTotalProduced >= subOrder.plannedQuantity) {
+-      // 如果生产完成，更新子订单的状态
+-      // 获取所有子订单的状态来决定主订单的状态
+-      const allSubOrders = await db.subOrder.findMany({
+-        where: { orderId: subOrder.orderId },
+-        include: { production: true },
+-      });
+-      
+-      let allCompleted = true;
+-      for (const so of allSubOrders) {
+-        const soProduction = so.production || [];
+-        const soTotalProduced = soProduction.reduce((sum, p) => sum + p.quantity, 0);
+-        if (soTotalProduced < so.plannedQuantity) {
+-          allCompleted = false;
+-          break;
+-        }
+-      }
+-      
+-      if (allCompleted) {
+-        // 如果所有子订单都已完成生产，更新主订单状态
+-        await db.order.update({
+-          where: { id: subOrder.orderId },
+-          data: { status: "COMPLETED" },
+-        });
+-      } else if (subOrder.order.status !== "IN_PRODUCTION") {
+-        // 至少有一个子订单在生产中
+-        await db.order.update({
+-          where: { id: subOrder.orderId },
+-          data: { status: "IN_PRODUCTION" },
+-        });
+-      }
+-    } else if (subOrder.order.status === "CONFIRMED") {
+-      // 开始生产时，将订单状态更新为生产中
+-      await db.order.update({
+-        where: { id: subOrder.orderId },
+-        data: { status: "IN_PRODUCTION" },
+-      });
+-    }
++    // 更新子订单状态
++    const updatedProducedQuantity = producedQuantity + data.quantity;
++    const isCompleted = updatedProducedQuantity >= subOrder.plannedQuantity;
++
++    // 检查整个订单的状态
++    await updateOrderStatus(subOrder.orderId);
+ 
+     // 记录审计日志
+-    await db.auditLog.create({
+-      data: {
+-        userId,
+-        action: "CREATE",
+-        resource: "PRODUCTION",
+-        resourceId: subOrder.id,
+-        description: `创建了订单 ${subOrder.order.orderNumber} 的生产记录，数量: ${values.quantity}`,
+-      },
++    await createAuditLog({
++      action: "CREATE",
++      resource: "PRODUCTION",
++      resourceId: production.id,
++      description: `创建了生产记录: ${subOrder.specification}/${subOrder.grade}, 数量: ${data.quantity}`,
++      metadata: JSON.stringify(production),
+     });
+ 
+     revalidatePath("/dashboard/production");
+-    return { success: true };
++    revalidatePath("/dashboard/orders");
++    revalidatePath(`/dashboard/orders/${subOrder.orderId}`);
++
++    return { success: true, data: production };
+   } catch (error) {
+     console.error("创建生产记录失败:", error);
+-    return { error: "创建生产记录失败" };
++    return {
++      success: false,
++      message: "创建生产记录失败，请重试",
++    };
+   }
+ }
+ 
+@@ -385,4 +351,212 @@ export async function getDropdownData() {
+     console.error("获取下拉选项数据失败:", error);
+     throw new Error("获取下拉选项数据失败");
+   }
++}
++
++/**
++ * 更新订单状态
++ */
++export async function updateOrderStatus(orderId: string) {
++  try {
++    // 获取订单及其子订单
++    const order = await db.order.findUnique({
++      where: {
++        id: orderId,
++      },
++      include: {
++        subOrders: {
++          include: {
++            production: true,
++            shipping: true,
++          },
++        },
++      },
++    });
++
++    if (!order) {
++      return { success: false, message: "订单不存在" };
++    }
++
++    // 计算生产和发运状态
++    let totalPlannedQuantity = 0;
++    let totalProducedQuantity = 0;
++    let totalShippedQuantity = 0;
++
++    order.subOrders.forEach((subOrder) => {
++      totalPlannedQuantity += subOrder.plannedQuantity;
++
++      subOrder.production.forEach((prod) => {
++        totalProducedQuantity += prod.quantity;
++      });
++
++      subOrder.shipping.forEach((ship) => {
++        totalShippedQuantity += ship.quantity;
++      });
++    });
++
++    // 确定订单状态
++    let newStatus = order.status;
++
++    // 如果订单处于草稿状态，不进行更新
++    if (order.status === OrderStatus.DRAFT) {
++      return { success: true };
++    }
++
++    // 如果有任何生产记录，订单至少是生产中
++    if (totalProducedQuantity > 0 && order.status === OrderStatus.CONFIRMED) {
++      newStatus = OrderStatus.IN_PRODUCTION;
++    }
++
++    // 如果生产完成，并且有部分发运
++    if (
++      totalProducedQuantity >= totalPlannedQuantity &&
++      totalShippedQuantity > 0 &&
++      totalShippedQuantity < totalPlannedQuantity
++    ) {
++      newStatus = OrderStatus.PARTIALLY_SHIPPED;
++    }
++
++    // 如果生产和发运都完成
++    if (
++      totalProducedQuantity >= totalPlannedQuantity &&
++      totalShippedQuantity >= totalPlannedQuantity
++    ) {
++      newStatus = OrderStatus.COMPLETED;
++    }
++
++    // 如果状态发生变化，更新订单
++    if (newStatus !== order.status) {
++      await db.order.update({
++        where: {
++          id: orderId,
++        },
++        data: {
++          status: newStatus,
++        },
++      });
++
++      // 记录订单状态变更日志
++      await createAuditLog({
++        action: "CHANGE_STATUS",
++        resource: "ORDER",
++        resourceId: orderId,
++        description: `订单状态从 ${order.status} 更新为 ${newStatus}`,
++        metadata: JSON.stringify({
++          previousStatus: order.status,
++          newStatus,
++          totalPlannedQuantity,
++          totalProducedQuantity,
++          totalShippedQuantity,
++        }),
++      });
++    }
++
++    return { success: true };
++  } catch (error) {
++    console.error("更新订单状态失败:", error);
++    return { success: false, message: "更新订单状态失败" };
++  }
++}
++
++/**
++ * 获取生产统计数据
++ */
++export async function getProductionStats() {
++  try {
++    // 获取今日生产记录
++    const today = new Date();
++    today.setHours(0, 0, 0, 0);
++    
++    const todayProductions = await db.production.findMany({
++      where: {
++        productionDate: {
++          gte: today,
++        },
++      },
++      include: {
++        subOrder: {
++          select: {
++            specification: true,
++            grade: true,
++          },
++        },
++      },
++    });
++    
++    // 计算今日总产量
++    const todayTotal = todayProductions.reduce(
++      (sum, prod) => sum + prod.quantity,
++      0
++    );
++    
++    // 按班组统计
++    const teamStats = await db.production.groupBy({
++      by: ["team"],
++      _sum: {
++        quantity: true,
++      },
++      where: {
++        productionDate: {
++          gte: new Date(new Date().setDate(today.getDate() - 30)),
++        },
++      },
++    });
++    
++    // 按产线统计
++    const lineStats = await db.production.groupBy({
++      by: ["productionLineId"],
++      _sum: {
++        quantity: true,
++      },
++      where: {
++        productionDate: {
++          gte: new Date(new Date().setDate(today.getDate() - 30)),
++        },
++      },
++    });
++    
++    // 获取产线信息
++    const productionLines = await db.productionLine.findMany({
++      where: {
++        id: {
++          in: lineStats.map((item) => item.productionLineId),
++        },
++      },
++    });
++    
++    // 组合产线统计
++    const lineStatsWithNames = lineStats.map((item) => {
++      const line = productionLines.find((l) => l.id === item.productionLineId);
++      return {
++        productionLineId: item.productionLineId,
++        productionLineName: line?.name || "未知产线",
++        quantity: item._sum.quantity || 0,
++      };
++    });
++    
++    return {
++      todayTotal,
++      todayDetails: todayProductions.map((p) => ({
++        id: p.id,
++        quantity: p.quantity,
++        team: p.team,
++        shift: p.shift,
++        specification: p.subOrder.specification,
++        grade: p.subOrder.grade,
++      })),
++      teamStats: teamStats.map((item) => ({
++        team: item.team,
++        quantity: item._sum.quantity || 0,
++      })),
++      lineStats: lineStatsWithNames,
++    };
++  } catch (error) {
++    console.error("获取生产统计失败:", error);
++    return {
++      todayTotal: 0,
++      todayDetails: [],
++      teamStats: [],
++      lineStats: [],
++    };
++  }
+ } 
+\ No newline at end of file
+diff --git a/app/(dashboard)/dashboard/production/components/production-form.tsx b/app/(dashboard)/dashboard/production/components/production-form.tsx
+index 8b8f10d..eeac634 100644
+--- a/app/(dashboard)/dashboard/production/components/production-form.tsx
++++ b/app/(dashboard)/dashboard/production/components/production-form.tsx
+@@ -1,13 +1,9 @@
+ "use client";
+ 
+-import { useState, useEffect } from "react";
+-import { useRouter } from "next/navigation";
+-import { useForm } from "react-hook-form";
++import { useState } from "react";
+ import { zodResolver } from "@hookform/resolvers/zod";
++import { useForm } from "react-hook-form";
+ import { z } from "zod";
+-import { ProductionStatus, ShiftType, TeamType } from "@prisma/client";
+-import { ProductionWithDetails } from "@/types/extended-types";
+-import { createProduction, updateProduction, getDropdownData } from "../actions";
+ import { Button } from "@/components/ui/button";
+ import {
+   Form,
+@@ -27,167 +23,182 @@ import {
+ } from "@/components/ui/select";
+ import { Input } from "@/components/ui/input";
+ import { Textarea } from "@/components/ui/textarea";
++import { CalendarIcon } from "lucide-react";
+ import { Calendar } from "@/components/ui/calendar";
+-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
++import {
++  Popover,
++  PopoverContent,
++  PopoverTrigger,
++} from "@/components/ui/popover";
+ import { format } from "date-fns";
+ import { cn } from "@/lib/utils";
+-import { CalendarIcon } from "lucide-react";
++import { Card, CardContent } from "@/components/ui/card";
++import { TeamType, ShiftType, ProductionStatus } from "@prisma/client";
++import { useRouter } from "next/navigation";
++import { createProduction } from "../actions";
+ import { toast } from "sonner";
++import { Progress } from "@/components/ui/progress";
++
++// 定义班组选项
++const teamOptions = [
++  { value: TeamType.TEAM_A, label: "甲班" },
++  { value: TeamType.TEAM_B, label: "乙班" },
++  { value: TeamType.TEAM_C, label: "丙班" },
++  { value: TeamType.TEAM_D, label: "丁班" },
++];
+ 
+-const formSchema = z.object({
+-  subOrderId: z.string().min(1, "订单项目为必填项"),
+-  status: z.nativeEnum(ProductionStatus),
+-  team: z.nativeEnum(TeamType),
+-  shift: z.nativeEnum(ShiftType),
+-  quantity: z.coerce.number().min(1, "数量必须大于0"),
+-  startTime: z.string().optional(),
+-  endTime: z.string().optional(),
++// 定义班次选项
++const shiftOptions = [
++  { value: ShiftType.DAY_SHIFT, label: "白班" },
++  { value: ShiftType.MIDDLE_SHIFT, label: "中班" },
++  { value: ShiftType.NIGHT_SHIFT, label: "夜班" },
++];
++
++// 定义生产记录表单架构
++const productionFormSchema = z.object({
++  subOrderId: z.string({
++    required_error: "请选择子订单",
++  }),
++  productionLineId: z.string({
++    required_error: "请选择生产线",
++  }),
++  team: z.nativeEnum(TeamType, {
++    required_error: "请选择班组",
++  }),
++  shift: z.nativeEnum(ShiftType, {
++    required_error: "请选择班次",
++  }),
++  productionDate: z.date({
++    required_error: "请选择生产日期",
++  }),
++  quantity: z.coerce
++    .number({
++      required_error: "请输入生产支数",
++      invalid_type_error: "请输入有效的数字",
++    })
++    .min(1, { message: "生产支数必须大于0" }),
++  startTime: z.date().optional(),
++  endTime: z.date().optional(),
++  qualityNotes: z.string().optional(),
++  materialUsage: z.string().optional(),
+   notes: z.string().optional(),
+ });
+ 
+-type ProductionFormValues = z.infer<typeof formSchema>;
++export type ProductionFormValues = z.infer<typeof productionFormSchema>;
+ 
+-interface ProductionFormProps {
+-  initialData?: ProductionWithDetails;
+-  initialValues?: { subOrderId?: string };
+-}
+-
+-type DropdownOption = {
++// 子订单类型
++type SubOrder = {
+   id: string;
+-  label: string;
++  specification: string;
++  grade: string;
+   plannedQuantity: number;
+-  produced: number;
++  producedQuantity: number;
++  progress: number;
++  remainingQuantity: number;
++  label: string;
++  productionLineId?: string | null;
++  order: {
++    orderNumber: string;
++    customer: {
++      name: string;
++    };
++  };
++};
++
++// 生产线类型
++type ProductionLine = {
++  id: string;
++  name: string;
++  type: string;
+ };
+ 
+-export const ProductionForm: React.FC<ProductionFormProps> = ({
+-  initialData,
+-  initialValues = {}
+-}) => {
++interface ProductionFormProps {
++  productionLines: ProductionLine[];
++  subOrders: SubOrder[];
++}
++
++export function ProductionForm({
++  productionLines,
++  subOrders,
++}: ProductionFormProps) {
+   const router = useRouter();
+-  const [loading, setLoading] = useState(false);
+-  const [dropdownData, setDropdownData] = useState<{
+-    subOrders: DropdownOption[];
+-  }>({
+-    subOrders: [],
+-  });
++  const [isLoading, setIsLoading] = useState(false);
++  const [selectedSubOrder, setSelectedSubOrder] = useState<SubOrder | null>(null);
++
++  // 设置默认值
++  const defaultValues: Partial<ProductionFormValues> = {
++    productionDate: new Date(),
++    team: TeamType.TEAM_A,
++    shift: ShiftType.DAY_SHIFT,
++  };
+ 
+   const form = useForm<ProductionFormValues>({
+-    resolver: zodResolver(formSchema),
+-    defaultValues: initialData ? {
+-      subOrderId: initialData.subOrderId,
+-      status: initialData.status as ProductionStatus,
+-      team: initialData.team as TeamType,
+-      shift: initialData.shift as ShiftType,
+-      quantity: initialData.quantity,
+-      startTime: initialData.startTime ? format(new Date(initialData.startTime), "yyyy-MM-dd'T'HH:mm") : undefined,
+-      endTime: initialData.endTime ? format(new Date(initialData.endTime), "yyyy-MM-dd'T'HH:mm") : undefined,
+-      notes: initialData.notes || "",
+-    } : {
+-      subOrderId: initialValues.subOrderId || "",
+-      status: ProductionStatus.NOT_STARTED,
+-      team: TeamType.TEAM_A,
+-      shift: ShiftType.DAY_SHIFT,
+-      quantity: 0,
+-      startTime: "",
+-      endTime: "",
+-      notes: "",
+-    },
++    resolver: zodResolver(productionFormSchema),
++    defaultValues,
+   });
+ 
+-  useEffect(() => {
+-    const fetchDropdownData = async () => {
+-      try {
+-        const data = await getDropdownData();
+-        setDropdownData(data);
+-        
+-        // 如果有指定的subOrderId并且没有初始数据，自动选择该子订单
+-        if (initialValues.subOrderId && !initialData) {
+-          form.setValue("subOrderId", initialValues.subOrderId);
+-        }
+-      } catch (error) {
+-        console.error("获取下拉选项数据失败:", error);
+-        toast.error("获取下拉选项数据失败");
+-      }
+-    };
++  // 当子订单改变时更新选中的子订单
++  const handleSubOrderChange = (value: string) => {
++    form.setValue("subOrderId", value);
++    const selected = subOrders.find((subOrder) => subOrder.id === value);
++    setSelectedSubOrder(selected || null);
+ 
+-    if (!initialData) {
+-      fetchDropdownData();
++    // 如果子订单有默认生产线，则自动选择
++    if (selected?.productionLineId) {
++      form.setValue("productionLineId", selected.productionLineId);
+     }
+-  }, [initialData, initialValues.subOrderId, form]);
++  };
+ 
+-  const onSubmit = async (data: ProductionFormValues) => {
++  async function onSubmit(data: ProductionFormValues) {
+     try {
+-      setLoading(true);
++      setIsLoading(true);
+       
+-      if (initialData) {
+-        // 更新生产记录
+-        const result = await updateProduction(initialData.id, data);
+-        if (result.error) {
+-          toast.error(result.error);
+-          return;
+-        }
+-        toast.success("生产记录更新成功");
+-      } else {
+-        // 创建新生产记录
+-        const result = await createProduction(data);
+-        if (result.error) {
+-          toast.error(result.error);
+-          return;
+-        }
++      // 检查数量是否超过剩余数量
++      if (selectedSubOrder && data.quantity > selectedSubOrder.remainingQuantity) {
++        toast.error(`生产支数不能超过剩余计划支数 ${selectedSubOrder.remainingQuantity}`);
++        return;
++      }
++      
++      // 发送请求
++      const result = await createProduction(data);
++      
++      if (result.success) {
+         toast.success("生产记录创建成功");
+         router.push("/dashboard/production");
++        router.refresh();
++      } else {
++        toast.error(result.message || "创建失败，请重试");
+       }
+     } catch (error) {
++      toast.error("提交过程中出现错误");
+       console.error(error);
+-      toast.error("操作失败");
+     } finally {
+-      setLoading(false);
++      setIsLoading(false);
+     }
+-  };
+-
+-  const statusOptions = [
+-    { value: ProductionStatus.NOT_STARTED, label: "未开始" },
+-    { value: ProductionStatus.IN_PROGRESS, label: "进行中" },
+-    { value: "COMPLETED", label: "已完成" },
+-    { value: "PAUSED", label: "已暂停" },
+-  ];
+-
+-  const teamOptions = [
+-    { value: TeamType.TEAM_A, label: "A班组" },
+-    { value: TeamType.TEAM_B, label: "B班组" },
+-    { value: TeamType.TEAM_C, label: "C班组" },
+-    { value: TeamType.TEAM_D, label: "D班组" },
+-  ];
+-
+-  const shiftOptions = [
+-    { value: ShiftType.DAY_SHIFT, label: "白班" },
+-    { value: ShiftType.NIGHT_SHIFT, label: "夜班" },
+-    { value: ShiftType.MIDDLE_SHIFT, label: "中班" },
+-  ];
++  }
+ 
+   return (
+     <Form {...form}>
+       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+-        {!initialData && (
++        <div className="grid gap-6 md:grid-cols-2">
+           <FormField
+             control={form.control}
+             name="subOrderId"
+             render={({ field }) => (
+-              <FormItem>
+-                <FormLabel>订单项目</FormLabel>
++              <FormItem className="flex flex-col">
++                <FormLabel>选择订单规格</FormLabel>
+                 <Select
+-                  disabled={loading || !!initialValues.subOrderId}
+-                  onValueChange={field.onChange}
++                  disabled={isLoading}
++                  onValueChange={handleSubOrderChange}
+                   value={field.value}
+-                  defaultValue={field.value}
+                 >
+                   <FormControl>
+                     <SelectTrigger>
+-                      <SelectValue placeholder="选择订单项目" />
++                      <SelectValue placeholder="选择订单规格" />
+                     </SelectTrigger>
+                   </FormControl>
+                   <SelectContent>
+-                    {dropdownData.subOrders.map((subOrder) => (
++                    {subOrders.map((subOrder) => (
+                       <SelectItem key={subOrder.id} value={subOrder.id}>
+                         {subOrder.label}
+                       </SelectItem>
+@@ -195,36 +206,85 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+                   </SelectContent>
+                 </Select>
+                 <FormDescription>
+-                  选择要生产的订单项目
++                  选择需要记录生产进度的订单规格
+                 </FormDescription>
+                 <FormMessage />
+               </FormItem>
+             )}
+           />
+-        )}
+ 
+-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
++          {selectedSubOrder && (
++            <Card className="md:col-span-2">
++              <CardContent className="pt-6">
++                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
++                  <div>
++                    <p className="text-sm font-medium">订单号</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.order.orderNumber}
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">客户</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.order.customer.name}
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">规格 / 级别</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.specification} / {selectedSubOrder.grade}
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">计划支数</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.plannedQuantity} 支
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">已生产</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.producedQuantity} 支
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">剩余</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.remainingQuantity} 支
++                    </p>
++                  </div>
++                  <div className="md:col-span-3">
++                    <div className="flex justify-between mb-2">
++                      <span className="text-sm font-medium">生产进度</span>
++                      <span className="text-sm font-medium">{selectedSubOrder.progress}%</span>
++                    </div>
++                    <Progress value={selectedSubOrder.progress} className="h-2" />
++                  </div>
++                </div>
++              </CardContent>
++            </Card>
++          )}
++
+           <FormField
+             control={form.control}
+-            name="status"
++            name="productionLineId"
+             render={({ field }) => (
+               <FormItem>
+-                <FormLabel>状态</FormLabel>
++                <FormLabel>生产线</FormLabel>
+                 <Select
+-                  disabled={loading}
++                  disabled={isLoading}
+                   onValueChange={field.onChange}
+                   value={field.value}
+-                  defaultValue={field.value}
+                 >
+                   <FormControl>
+                     <SelectTrigger>
+-                      <SelectValue placeholder="选择状态" />
++                      <SelectValue placeholder="选择生产线" />
+                     </SelectTrigger>
+                   </FormControl>
+                   <SelectContent>
+-                    {statusOptions.map((option) => (
+-                      <SelectItem key={option.value} value={option.value}>
+-                        {option.label}
++                    {productionLines.map((line) => (
++                      <SelectItem key={line.id} value={line.id}>
++                        {line.name}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+@@ -239,12 +299,11 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+             name="team"
+             render={({ field }) => (
+               <FormItem>
+-                <FormLabel>生产班组</FormLabel>
++                <FormLabel>班组</FormLabel>
+                 <Select
+-                  disabled={loading}
++                  disabled={isLoading}
+                   onValueChange={field.onChange}
+                   value={field.value}
+-                  defaultValue={field.value}
+                 >
+                   <FormControl>
+                     <SelectTrigger>
+@@ -271,10 +330,9 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+               <FormItem>
+                 <FormLabel>班次</FormLabel>
+                 <Select
+-                  disabled={loading}
++                  disabled={isLoading}
+                   onValueChange={field.onChange}
+                   value={field.value}
+-                  defaultValue={field.value}
+                 >
+                   <FormControl>
+                     <SelectTrigger>
+@@ -293,23 +351,69 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+               </FormItem>
+             )}
+           />
+-        </div>
+ 
+-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
++          <FormField
++            control={form.control}
++            name="productionDate"
++            render={({ field }) => (
++              <FormItem className="flex flex-col">
++                <FormLabel>生产日期</FormLabel>
++                <Popover>
++                  <PopoverTrigger asChild>
++                    <FormControl>
++                      <Button
++                        variant={"outline"}
++                        className={cn(
++                          "w-full pl-3 text-left font-normal",
++                          !field.value && "text-muted-foreground"
++                        )}
++                      >
++                        {field.value ? (
++                          format(field.value, "yyyy-MM-dd")
++                        ) : (
++                          <span>选择日期</span>
++                        )}
++                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
++                      </Button>
++                    </FormControl>
++                  </PopoverTrigger>
++                  <PopoverContent className="w-auto p-0" align="start">
++                    <Calendar
++                      mode="single"
++                      selected={field.value}
++                      onSelect={field.onChange}
++                      disabled={(date) =>
++                        date > new Date() || date < new Date("1900-01-01")
++                      }
++                      initialFocus
++                    />
++                  </PopoverContent>
++                </Popover>
++                <FormMessage />
++              </FormItem>
++            )}
++          />
++
+           <FormField
+             control={form.control}
+             name="quantity"
+             render={({ field }) => (
+               <FormItem>
+-                <FormLabel>生产数量</FormLabel>
++                <FormLabel>生产支数</FormLabel>
+                 <FormControl>
+                   <Input
+                     type="number"
+-                    disabled={loading}
+-                    placeholder="输入数量"
++                    placeholder="输入生产支数"
+                     {...field}
++                    min={1}
++                    max={selectedSubOrder?.remainingQuantity}
+                   />
+                 </FormControl>
++                <FormDescription>
++                  {selectedSubOrder
++                    ? `最大可输入: ${selectedSubOrder.remainingQuantity} 支`
++                    : "请先选择子订单"}
++                </FormDescription>
+                 <FormMessage />
+               </FormItem>
+             )}
+@@ -317,14 +421,14 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+ 
+           <FormField
+             control={form.control}
+-            name="startTime"
++            name="qualityNotes"
+             render={({ field }) => (
+-              <FormItem className="flex flex-col">
+-                <FormLabel>开始时间</FormLabel>
++              <FormItem className="md:col-span-2">
++                <FormLabel>质量备注</FormLabel>
+                 <FormControl>
+-                  <Input
+-                    type="datetime-local"
+-                    disabled={loading}
++                  <Textarea
++                    placeholder="输入质量相关备注信息..."
++                    className="resize-none"
+                     {...field}
+                   />
+                 </FormControl>
+@@ -335,14 +439,14 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+ 
+           <FormField
+             control={form.control}
+-            name="endTime"
++            name="materialUsage"
+             render={({ field }) => (
+-              <FormItem className="flex flex-col">
+-                <FormLabel>结束时间</FormLabel>
++              <FormItem className="md:col-span-2">
++                <FormLabel>材料使用</FormLabel>
+                 <FormControl>
+-                  <Input
+-                    type="datetime-local"
+-                    disabled={loading}
++                  <Textarea
++                    placeholder="输入材料使用情况..."
++                    className="resize-none"
+                     {...field}
+                   />
+                 </FormControl>
+@@ -350,30 +454,41 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
+               </FormItem>
+             )}
+           />
+-        </div>
+ 
+-        <FormField
+-          control={form.control}
+-          name="notes"
+-          render={({ field }) => (
+-            <FormItem>
+-              <FormLabel>备注</FormLabel>
+-              <FormControl>
+-                <Textarea
+-                  disabled={loading}
+-                  placeholder="输入备注信息"
+-                  {...field}
+-                />
+-              </FormControl>
+-              <FormMessage />
+-            </FormItem>
+-          )}
+-        />
++          <FormField
++            control={form.control}
++            name="notes"
++            render={({ field }) => (
++              <FormItem className="md:col-span-2">
++                <FormLabel>其他备注</FormLabel>
++                <FormControl>
++                  <Textarea
++                    placeholder="输入其他相关备注信息..."
++                    className="resize-none"
++                    {...field}
++                  />
++                </FormControl>
++                <FormMessage />
++              </FormItem>
++            )}
++          />
++        </div>
+ 
+-        <Button type="submit" disabled={loading}>
+-          {initialData ? "更新生产记录" : "创建生产记录"}
+-        </Button>
++        <div className="flex justify-end">
++          <Button
++            type="button"
++            variant="outline"
++            className="mr-2"
++            onClick={() => router.push("/dashboard/production")}
++            disabled={isLoading}
++          >
++            取消
++          </Button>
++          <Button type="submit" disabled={isLoading || !selectedSubOrder}>
++            {isLoading ? "提交中..." : "保存生产记录"}
++          </Button>
++        </div>
+       </form>
+     </Form>
+   );
+-}; 
+\ No newline at end of file
++} 
+\ No newline at end of file
+diff --git a/app/(dashboard)/dashboard/production/new/page.tsx b/app/(dashboard)/dashboard/production/new/page.tsx
+index 0e085af..3f57ceb 100644
+--- a/app/(dashboard)/dashboard/production/new/page.tsx
++++ b/app/(dashboard)/dashboard/production/new/page.tsx
+@@ -5,6 +5,13 @@ import { Heading } from "@/components/ui/heading";
+ import { Separator } from "@/components/ui/separator";
+ import { ProductionForm } from "../components/production-form";
+ import { useEffect, useState, Suspense } from "react";
++import { db } from "@/lib/db";
++import { redirect } from "next/navigation";
++import { withPermission } from "@/lib/rbac";
++
++export const metadata = {
++  title: "新增生产记录 | 安钢集团永通球墨铸铁管订单管理系统",
++};
+ 
+ // 创建一个内部组件包含useSearchParams的逻辑
+ const ProductionPageContent = () => {
+@@ -33,11 +40,88 @@ const ProductionPageContent = () => {
+ };
+ 
+ // 主页面组件使用Suspense包裹内容
+-const NewProductionPage = () => {
++const NewProductionPage = async () => {
++  // 权限检查
++  await withPermission("production", "create");
++
++  // 获取所有有效的生产线
++  const productionLines = await db.productionLine.findMany({
++    where: { isActive: true },
++    orderBy: { name: "asc" },
++  });
++
++  // 获取所有未完成的子订单
++  const subOrders = await db.subOrder.findMany({
++    where: {
++      order: {
++        status: {
++          in: ["CONFIRMED", "IN_PRODUCTION", "PARTIALLY_SHIPPED"],
++        }
++      }
++    },
++    include: {
++      order: {
++        select: {
++          orderNumber: true,
++          customer: {
++            select: {
++              name: true
++            }
++          }
++        }
++      },
++      production: {
++        select: {
++          quantity: true
++        }
++      }
++    },
++    orderBy: [
++      { 
++        priorityLevel: "desc" 
++      },
++      { 
++        deliveryDate: "asc" 
++      }
++    ]
++  });
++
++  // 计算每个子订单已生产的数量
++  const subOrdersWithProgress = subOrders.map(subOrder => {
++    const producedQuantity = subOrder.production.reduce((sum, prod) => sum + prod.quantity, 0);
++    const progress = subOrder.plannedQuantity > 0 
++      ? Math.round((producedQuantity / subOrder.plannedQuantity) * 100) 
++      : 0;
++    
++    return {
++      ...subOrder,
++      producedQuantity,
++      progress,
++      remainingQuantity: subOrder.plannedQuantity - producedQuantity,
++      label: `${subOrder.order.orderNumber} - ${subOrder.specification} / ${subOrder.grade} (${progress}%)`
++    }
++  });
++
++  // 过滤掉已完成的子订单
++  const availableSubOrders = subOrdersWithProgress.filter(
++    subOrder => subOrder.progress < 100
++  );
++
++  if (availableSubOrders.length === 0) {
++    redirect("/dashboard/production?error=no-active-orders");
++  }
++
+   return (
+-    <Suspense fallback={<div className="flex-1 space-y-4 p-8 pt-6">加载中...</div>}>
+-      <ProductionPageContent />
+-    </Suspense>
++    <div className="flex-1 space-y-4 p-4 pt-6">
++      <div className="flex items-center justify-between">
++        <Heading title="新增生产记录" description="记录球墨铸铁管生产进度" />
++      </div>
++      <Separator />
++      <ProductionForm 
++        productionLines={productionLines}
++        subOrders={availableSubOrders}
++      />
++    </div>
+   );
+ };
+ 
+diff --git a/app/(dashboard)/dashboard/shipping/components/shipping-form.tsx b/app/(dashboard)/dashboard/shipping/components/shipping-form.tsx
+index e056b72..aea00e5 100644
+--- a/app/(dashboard)/dashboard/shipping/components/shipping-form.tsx
++++ b/app/(dashboard)/dashboard/shipping/components/shipping-form.tsx
+@@ -1,13 +1,9 @@
+ "use client";
+ 
+-import { useState, useEffect } from "react";
+-import { useRouter } from "next/navigation";
+-import { useForm } from "react-hook-form";
++import { useState } from "react";
+ import { zodResolver } from "@hookform/resolvers/zod";
++import { useForm } from "react-hook-form";
+ import { z } from "zod";
+-import { TransportationType } from "@prisma/client";
+-import { ShippingWithDetails } from "@/types/extended-types";
+-import { createShipping, updateShipping, getDropdownData } from "../actions";
+ import { Button } from "@/components/ui/button";
+ import {
+   Form,
+@@ -27,160 +23,175 @@ import {
+ } from "@/components/ui/select";
+ import { Input } from "@/components/ui/input";
+ import { Textarea } from "@/components/ui/textarea";
++import { CalendarIcon } from "lucide-react";
++import { Calendar } from "@/components/ui/calendar";
++import {
++  Popover,
++  PopoverContent,
++  PopoverTrigger,
++} from "@/components/ui/popover";
+ import { format } from "date-fns";
++import { cn } from "@/lib/utils";
++import { Card, CardContent } from "@/components/ui/card";
++import { TransportationType } from "@prisma/client";
++import { useRouter } from "next/navigation";
++import { createShipping } from "../actions";
+ import { toast } from "sonner";
++import { Progress } from "@/components/ui/progress";
++
++// 定义运输方式选项
++const transportOptions = [
++  { value: TransportationType.TRUCK, label: "汽运" },
++  { value: TransportationType.TRAIN, label: "火车" },
++  { value: TransportationType.SHIP, label: "船运" },
++  { value: TransportationType.OTHER, label: "其他" },
++];
+ 
+-const formSchema = z.object({
+-  subOrderId: z.string().min(1, "订单项目为必填项"),
+-  quantity: z.coerce.number().min(1, "数量必须大于0"),
+-  shippingDate: z.string(),
+-  transportType: z.nativeEnum(TransportationType),
++// 定义发运记录表单架构
++const shippingFormSchema = z.object({
++  subOrderId: z.string({
++    required_error: "请选择子订单",
++  }),
++  warehouseId: z.string({
++    required_error: "请选择仓库",
++  }),
++  shippingDate: z.date({
++    required_error: "请选择发运日期",
++  }),
++  transportType: z.nativeEnum(TransportationType, {
++    required_error: "请选择运输方式",
++  }),
++  carrierName: z.string().optional(),
++  vehicleInfo: z.string().optional(),
++  driverInfo: z.string().optional(),
+   shippingNumber: z.string().optional(),
+-  destinationInfo: z.string().min(1, "目的地地址为必填项"),
+-  driverInfo: z.string().min(1, "司机信息为必填项"),
+-  vehicleInfo: z.string().min(1, "车辆信息为必填项"),
++  quantity: z.coerce
++    .number({
++      required_error: "请输入发运支数",
++      invalid_type_error: "请输入有效的数字",
++    })
++    .min(1, { message: "发运支数必须大于0" }),
++  destinationInfo: z.string().optional(),
++  estimatedArrival: z.date().optional(),
+   notes: z.string().optional(),
+ });
+ 
+-type ShippingFormValues = z.infer<typeof formSchema>;
++export type ShippingFormValues = z.infer<typeof shippingFormSchema>;
+ 
+-interface ShippingFormProps {
+-  initialData?: ShippingWithDetails;
+-}
+-
+-type DropdownOption = {
++// 子订单类型
++type SubOrder = {
+   id: string;
++  specification: string;
++  grade: string;
++  plannedQuantity: number;
++  producedQuantity: number;
++  shippedQuantity: number; 
++  progress: number;
++  shippingProgress: number;
++  remainingQuantity: number;
+   label: string;
+-  produced: number;
+-  shipped: number;
+-  available: number;
++  warehouseId?: string | null;
++  order: {
++    orderNumber: string;
++    customer: {
++      name: string;
++    };
++  };
++};
++
++// 仓库类型
++type Warehouse = {
++  id: string;
++  name: string;
++  location?: string | null;
+ };
+ 
+-export const ShippingForm: React.FC<ShippingFormProps> = ({
+-  initialData,
+-}) => {
++interface ShippingFormProps {
++  warehouses: Warehouse[];
++  subOrders: SubOrder[];
++}
++
++export function ShippingForm({
++  warehouses,
++  subOrders,
++}: ShippingFormProps) {
+   const router = useRouter();
+-  const [loading, setLoading] = useState(false);
+-  const [dropdownData, setDropdownData] = useState<{
+-    subOrders: DropdownOption[];
+-  }>({
+-    subOrders: [],
+-  });
++  const [isLoading, setIsLoading] = useState(false);
++  const [selectedSubOrder, setSelectedSubOrder] = useState<SubOrder | null>(null);
++
++  // 设置默认值
++  const defaultValues: Partial<ShippingFormValues> = {
++    shippingDate: new Date(),
++    transportType: TransportationType.TRUCK,
++  };
+ 
+   const form = useForm<ShippingFormValues>({
+-    resolver: zodResolver(formSchema),
+-    defaultValues: initialData ? {
+-      subOrderId: initialData.subOrderId,
+-      quantity: initialData.quantity,
+-      shippingDate: format(new Date(initialData.shippingDate), "yyyy-MM-dd"),
+-      transportType: initialData.transportType as TransportationType,
+-      shippingNumber: initialData.shippingNumber || "",
+-      destinationInfo: initialData.destinationInfo || "",
+-      driverInfo: initialData.driverInfo || "",
+-      vehicleInfo: initialData.vehicleInfo || "",
+-      notes: initialData.notes || "",
+-    } : {
+-      subOrderId: "",
+-      quantity: 0,
+-      shippingDate: format(new Date(), "yyyy-MM-dd"),
+-      transportType: TransportationType.TRUCK,
+-      shippingNumber: "",
+-      destinationInfo: "",
+-      driverInfo: "",
+-      vehicleInfo: "",
+-      notes: "",
+-    },
++    resolver: zodResolver(shippingFormSchema),
++    defaultValues,
+   });
+ 
+-  useEffect(() => {
+-    const fetchDropdownData = async () => {
+-      try {
+-        const data = await getDropdownData();
+-        setDropdownData(data);
+-      } catch (error) {
+-        console.error("获取下拉选项数据失败:", error);
+-        toast.error("获取下拉选项数据失败");
+-      }
+-    };
++  // 当子订单改变时更新选中的子订单
++  const handleSubOrderChange = (value: string) => {
++    form.setValue("subOrderId", value);
++    const selected = subOrders.find((subOrder) => subOrder.id === value);
++    setSelectedSubOrder(selected || null);
+ 
+-    if (!initialData) {
+-      fetchDropdownData();
+-    }
+-  }, [initialData]);
+-
+-  const onSubOrderChange = (subOrderId: string) => {
+-    // 重置数量，根据当前选择的子订单设置最大可用数量
+-    form.setValue("subOrderId", subOrderId);
+-    const selectedSubOrder = dropdownData.subOrders.find(so => so.id === subOrderId);
+-    if (selectedSubOrder) {
+-      form.setValue("quantity", 0);
++    // 如果子订单有默认仓库，则自动选择
++    if (selected?.warehouseId) {
++      form.setValue("warehouseId", selected.warehouseId);
+     }
+   };
+ 
+-  const onSubmit = async (data: ShippingFormValues) => {
++  async function onSubmit(data: ShippingFormValues) {
+     try {
+-      setLoading(true);
++      setIsLoading(true);
+       
+-      if (initialData) {
+-        // 更新发货记录
+-        const result = await updateShipping(initialData.id, data);
+-        if (result.error) {
+-          toast.error(result.error);
+-          return;
+-        }
+-        toast.success("发货记录更新成功");
+-      } else {
+-        // 创建新发货记录
+-        const result = await createShipping(data);
+-        if (result.error) {
+-          toast.error(result.error);
+-          return;
+-        }
+-        toast.success("发货记录创建成功");
++      // 检查数量是否超过可发运数量
++      if (selectedSubOrder && data.quantity > selectedSubOrder.remainingQuantity) {
++        toast.error(`发运支数不能超过剩余可发运支数 ${selectedSubOrder.remainingQuantity}`);
++        return;
++      }
++      
++      // 发送请求
++      const result = await createShipping(data);
++      
++      if (result.success) {
++        toast.success("发运记录创建成功");
+         router.push("/dashboard/shipping");
++        router.refresh();
++      } else {
++        toast.error(result.message || "创建失败，请重试");
+       }
+     } catch (error) {
++      toast.error("提交过程中出现错误");
+       console.error(error);
+-      toast.error("操作失败");
+     } finally {
+-      setLoading(false);
++      setIsLoading(false);
+     }
+-  };
+-
+-  const transportationOptions = [
+-    { value: TransportationType.TRUCK, label: "货车" },
+-    { value: TransportationType.TRAIN, label: "火车" },
+-    { value: TransportationType.SHIP, label: "轮船" },
+-    { value: TransportationType.OTHER, label: "其他" },
+-  ];
+-
+-  const selectedSubOrderId = form.watch("subOrderId");
+-  const selectedSubOrder = dropdownData.subOrders.find(so => so.id === selectedSubOrderId);
+-  const maxAvailable = selectedSubOrder?.available || 0;
++  }
+ 
+   return (
+     <Form {...form}>
+       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+-        {!initialData && (
++        <div className="grid gap-6 md:grid-cols-2">
+           <FormField
+             control={form.control}
+             name="subOrderId"
+             render={({ field }) => (
+-              <FormItem>
+-                <FormLabel>订单项目</FormLabel>
++              <FormItem className="flex flex-col">
++                <FormLabel>选择订单规格</FormLabel>
+                 <Select
+-                  disabled={loading}
+-                  onValueChange={(value) => onSubOrderChange(value)}
++                  disabled={isLoading}
++                  onValueChange={handleSubOrderChange}
+                   value={field.value}
+-                  defaultValue={field.value}
+                 >
+                   <FormControl>
+                     <SelectTrigger>
+-                      <SelectValue placeholder="选择订单项目" />
++                      <SelectValue placeholder="选择订单规格" />
+                     </SelectTrigger>
+                   </FormControl>
+                   <SelectContent>
+-                    {dropdownData.subOrders.map((subOrder) => (
++                    {subOrders.map((subOrder) => (
+                       <SelectItem key={subOrder.id} value={subOrder.id}>
+                         {subOrder.label}
+                       </SelectItem>
+@@ -188,34 +199,96 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+                   </SelectContent>
+                 </Select>
+                 <FormDescription>
+-                  选择要发货的订单项目
++                  选择需要记录发运进度的订单规格
+                 </FormDescription>
+                 <FormMessage />
+               </FormItem>
+             )}
+           />
+-        )}
+ 
+-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
++          {selectedSubOrder && (
++            <Card className="md:col-span-2">
++              <CardContent className="pt-6">
++                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
++                  <div>
++                    <p className="text-sm font-medium">订单号</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.order.orderNumber}
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">客户</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.order.customer.name}
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">规格 / 级别</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.specification} / {selectedSubOrder.grade}
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">计划支数</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.plannedQuantity} 支
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">已发运</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.shippedQuantity} 支
++                    </p>
++                  </div>
++                  <div>
++                    <p className="text-sm font-medium">可发运</p>
++                    <p className="text-sm text-muted-foreground">
++                      {selectedSubOrder.remainingQuantity} 支
++                    </p>
++                  </div>
++                  <div className="md:col-span-3">
++                    <div className="flex justify-between mb-2">
++                      <span className="text-sm font-medium">生产进度</span>
++                      <span className="text-sm font-medium">{selectedSubOrder.progress}%</span>
++                    </div>
++                    <Progress value={selectedSubOrder.progress} className="h-2" />
++                  </div>
++                  <div className="md:col-span-3">
++                    <div className="flex justify-between mb-2">
++                      <span className="text-sm font-medium">发运进度</span>
++                      <span className="text-sm font-medium">{selectedSubOrder.shippingProgress}%</span>
++                    </div>
++                    <Progress value={selectedSubOrder.shippingProgress} className="h-2" />
++                  </div>
++                </div>
++              </CardContent>
++            </Card>
++          )}
++
+           <FormField
+             control={form.control}
+-            name="quantity"
++            name="warehouseId"
+             render={({ field }) => (
+               <FormItem>
+-                <FormLabel>发货数量</FormLabel>
+-                <FormControl>
+-                  <Input
+-                    type="number"
+-                    disabled={loading}
+-                    placeholder="输入数量"
+-                    {...field}
+-                  />
+-                </FormControl>
+-                {selectedSubOrder && (
+-                  <FormDescription>
+-                    当前可发货数量: {maxAvailable}
+-                  </FormDescription>
+-                )}
++                <FormLabel>仓库</FormLabel>
++                <Select
++                  disabled={isLoading}
++                  onValueChange={field.onChange}
++                  value={field.value}
++                >
++                  <FormControl>
++                    <SelectTrigger>
++                      <SelectValue placeholder="选择仓库" />
++                    </SelectTrigger>
++                  </FormControl>
++                  <SelectContent>
++                    {warehouses.map((warehouse) => (
++                      <SelectItem key={warehouse.id} value={warehouse.id}>
++                        {warehouse.name} {warehouse.location ? `(${warehouse.location})` : ''}
++                      </SelectItem>
++                    ))}
++                  </SelectContent>
++                </Select>
+                 <FormMessage />
+               </FormItem>
+             )}
+@@ -225,22 +298,44 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+             control={form.control}
+             name="shippingDate"
+             render={({ field }) => (
+-              <FormItem>
+-                <FormLabel>发货日期</FormLabel>
+-                <FormControl>
+-                  <Input
+-                    type="date"
+-                    disabled={loading}
+-                    {...field}
+-                  />
+-                </FormControl>
++              <FormItem className="flex flex-col">
++                <FormLabel>发运日期</FormLabel>
++                <Popover>
++                  <PopoverTrigger asChild>
++                    <FormControl>
++                      <Button
++                        variant={"outline"}
++                        className={cn(
++                          "w-full pl-3 text-left font-normal",
++                          !field.value && "text-muted-foreground"
++                        )}
++                      >
++                        {field.value ? (
++                          format(field.value, "yyyy-MM-dd")
++                        ) : (
++                          <span>选择日期</span>
++                        )}
++                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
++                      </Button>
++                    </FormControl>
++                  </PopoverTrigger>
++                  <PopoverContent className="w-auto p-0" align="start">
++                    <Calendar
++                      mode="single"
++                      selected={field.value}
++                      onSelect={field.onChange}
++                      disabled={(date) =>
++                        date > new Date() || date < new Date("1900-01-01")
++                      }
++                      initialFocus
++                    />
++                  </PopoverContent>
++                </Popover>
+                 <FormMessage />
+               </FormItem>
+             )}
+           />
+-        </div>
+ 
+-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+           <FormField
+             control={form.control}
+             name="transportType"
+@@ -248,10 +343,9 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+               <FormItem>
+                 <FormLabel>运输方式</FormLabel>
+                 <Select
+-                  disabled={loading}
++                  disabled={isLoading}
+                   onValueChange={field.onChange}
+                   value={field.value}
+-                  defaultValue={field.value}
+                 >
+                   <FormControl>
+                     <SelectTrigger>
+@@ -259,7 +353,7 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+                     </SelectTrigger>
+                   </FormControl>
+                   <SelectContent>
+-                    {transportationOptions.map((option) => (
++                    {transportOptions.map((option) => (
+                       <SelectItem key={option.value} value={option.value}>
+                         {option.label}
+                       </SelectItem>
+@@ -273,52 +367,95 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+ 
+           <FormField
+             control={form.control}
+-            name="shippingNumber"
++            name="quantity"
+             render={({ field }) => (
+               <FormItem>
+-                <FormLabel>运输单号</FormLabel>
++                <FormLabel>发运支数</FormLabel>
+                 <FormControl>
+                   <Input
+-                    disabled={loading}
+-                    placeholder="输入运输单号(可选)"
++                    type="number"
++                    placeholder="输入发运支数"
+                     {...field}
++                    min={1}
++                    max={selectedSubOrder?.remainingQuantity}
+                   />
+                 </FormControl>
++                <FormDescription>
++                  {selectedSubOrder
++                    ? `最大可输入: ${selectedSubOrder.remainingQuantity} 支`
++                    : "请先选择子订单"}
++                </FormDescription>
+                 <FormMessage />
+               </FormItem>
+             )}
+           />
+-        </div>
+ 
+-        <FormField
+-          control={form.control}
+-          name="destinationInfo"
+-          render={({ field }) => (
+-            <FormItem>
+-              <FormLabel>目的地地址</FormLabel>
+-              <FormControl>
+-                <Input
+-                  disabled={loading}
+-                  placeholder="输入详细地址"
+-                  {...field}
+-                />
+-              </FormControl>
+-              <FormMessage />
+-            </FormItem>
+-          )}
+-        />
++          <FormField
++            control={form.control}
++            name="carrierName"
++            render={({ field }) => (
++              <FormItem>
++                <FormLabel>承运单位</FormLabel>
++                <FormControl>
++                  <Input placeholder="输入承运单位名称" {...field} />
++                </FormControl>
++                <FormMessage />
++              </FormItem>
++            )}
++          />
++
++          <FormField
++            control={form.control}
++            name="vehicleInfo"
++            render={({ field }) => (
++              <FormItem>
++                <FormLabel>车辆信息</FormLabel>
++                <FormControl>
++                  <Input placeholder="输入车牌号/车次信息" {...field} />
++                </FormControl>
++                <FormMessage />
++              </FormItem>
++            )}
++          />
++
++          <FormField
++            control={form.control}
++            name="shippingNumber"
++            render={({ field }) => (
++              <FormItem>
++                <FormLabel>发运单号</FormLabel>
++                <FormControl>
++                  <Input placeholder="输入发运单号" {...field} />
++                </FormControl>
++                <FormMessage />
++              </FormItem>
++            )}
++          />
+ 
+-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+           <FormField
+             control={form.control}
+             name="driverInfo"
+             render={({ field }) => (
+               <FormItem>
+-                <FormLabel>联系人</FormLabel>
++                <FormLabel>司机信息</FormLabel>
+                 <FormControl>
+-                  <Input
+-                    disabled={loading}
+-                    placeholder="输入联系人姓名"
++                  <Input placeholder="输入司机姓名和联系方式" {...field} />
++                </FormControl>
++                <FormMessage />
++              </FormItem>
++            )}
++          />
++
++          <FormField
++            control={form.control}
++            name="destinationInfo"
++            render={({ field }) => (
++              <FormItem className="md:col-span-2">
++                <FormLabel>目的地信息</FormLabel>
++                <FormControl>
++                  <Textarea
++                    placeholder="输入详细的目的地信息..."
++                    className="resize-none"
+                     {...field}
+                   />
+                 </FormControl>
+@@ -329,14 +466,14 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+ 
+           <FormField
+             control={form.control}
+-            name="vehicleInfo"
++            name="notes"
+             render={({ field }) => (
+-              <FormItem>
+-                <FormLabel>联系电话</FormLabel>
++              <FormItem className="md:col-span-2">
++                <FormLabel>备注</FormLabel>
+                 <FormControl>
+-                  <Input
+-                    disabled={loading}
+-                    placeholder="输入联系电话"
++                  <Textarea
++                    placeholder="输入其他备注信息..."
++                    className="resize-none"
+                     {...field}
+                   />
+                 </FormControl>
+@@ -346,28 +483,21 @@ export const ShippingForm: React.FC<ShippingFormProps> = ({
+           />
+         </div>
+ 
+-        <FormField
+-          control={form.control}
+-          name="notes"
+-          render={({ field }) => (
+-            <FormItem>
+-              <FormLabel>备注</FormLabel>
+-              <FormControl>
+-                <Textarea
+-                  disabled={loading}
+-                  placeholder="输入备注信息"
+-                  {...field}
+-                />
+-              </FormControl>
+-              <FormMessage />
+-            </FormItem>
+-          )}
+-        />
+-
+-        <Button type="submit" disabled={loading}>
+-          {initialData ? "更新发货记录" : "创建发货记录"}
+-        </Button>
++        <div className="flex justify-end">
++          <Button
++            type="button"
++            variant="outline"
++            className="mr-2"
++            onClick={() => router.push("/dashboard/shipping")}
++            disabled={isLoading}
++          >
++            取消
++          </Button>
++          <Button type="submit" disabled={isLoading || !selectedSubOrder}>
++            {isLoading ? "提交中..." : "保存发运记录"}
++          </Button>
++        </div>
+       </form>
+     </Form>
+   );
+-}; 
+\ No newline at end of file
++} 
+\ No newline at end of file
+diff --git a/app/api/alerts/route.ts b/app/api/alerts/route.ts
+new file mode 100644
+index 0000000..1a3d56e
+--- /dev/null
++++ b/app/api/alerts/route.ts
+@@ -0,0 +1,297 @@
++import { NextResponse } from "next/server";
++import { auth } from "@/lib/auth";
++import { db } from "@/lib/db";
++import { addDays, isAfter, isBefore, parseISO } from "date-fns";
++
++/**
++ * GET /api/alerts
++ * 获取用户相关的提醒数据
++ */
++export async function GET(req: Request) {
++  try {
++    // 验证用户身份
++    const session = await auth();
++    
++    if (!session?.user?.id) {
++      return new NextResponse("未授权", { status: 401 });
++    }
++    
++    const userId = session.user.id;
++    
++    // 获取用户
++    const user = await db.user.findUnique({
++      where: { id: userId },
++      select: { id: true, role: true }
++    });
++    
++    if (!user) {
++      return new NextResponse("未找到用户", { status: 404 });
++    }
++    
++    // 生成提醒列表
++    const alerts = await generateAlerts(user);
++    
++    return NextResponse.json(alerts);
++  } catch (error) {
++    console.error("获取提醒出错:", error);
++    return new NextResponse("服务器内部错误", { status: 500 });
++  }
++}
++
++/**
++ * 生成用户提醒列表
++ */
++async function generateAlerts(user: { id: string, role: string }) {
++  const now = new Date();
++  const alerts = [];
++  
++  // 查询未读通知
++  const notifications = await db.notification.findMany({
++    where: {
++      userId: user.id,
++      read: false,
++    },
++    orderBy: {
++      createdAt: "desc",
++    },
++    take: 10,
++  });
++  
++  // 将通知转换为提醒
++  for (const notification of notifications) {
++    alerts.push({
++      id: notification.id,
++      type: notification.type === "URGENT" ? "urgent" : 
++            notification.type === "WARNING" ? "warning" : "info",
++      title: notification.title,
++      description: notification.message,
++      link: notification.link || undefined,
++      date: notification.createdAt,
++      priority: notification.type === "URGENT" ? 100 : 
++               notification.type === "WARNING" ? 80 : 60,
++      isNew: true,
++    });
++  }
++  
++  // 查询紧急订单
++  // 仅包含有权限查看的角色
++  if (["SUPER_ADMIN", "ADMIN", "ORDER_SPECIALIST", "PRODUCTION_STAFF"].includes(user.role)) {
++    const urgentOrders = await db.order.findMany({
++      where: {
++        OR: [
++          { status: "CONFIRMED" },
++          { status: "IN_PRODUCTION" },
++        ],
++        subOrders: {
++          some: {
++            OR: [
++              { priorityLevel: "URGENT" },
++              { priorityLevel: "CRITICAL" },
++            ],
++          },
++        },
++      },
++      include: {
++        customer: {
++          select: {
++            name: true,
++          },
++        },
++        subOrders: {
++          where: {
++            OR: [
++              { priorityLevel: "URGENT" },
++              { priorityLevel: "CRITICAL" },
++            ],
++          },
++          select: {
++            specification: true,
++            plannedQuantity: true,
++            priorityLevel: true,
++            deliveryDate: true,
++          },
++        },
++      },
++      take: 10,
++    });
++    
++    // 将紧急订单转换为提醒
++    for (const order of urgentOrders) {
++      alerts.push({
++        id: `urgent-order-${order.id}`,
++        type: "urgent",
++        title: `紧急订单: ${order.orderNumber}`,
++        description: `客户 ${order.customer.name} 的紧急订单需要处理，包含 ${order.subOrders.length} 个紧急子订单`,
++        link: `/dashboard/orders/${order.id}`,
++        date: new Date(), // 当前日期，表示立即需要处理
++        priority: 95,
++        isNew: false,
++      });
++    }
++  }
++  
++  // 查询临近交期的订单
++  // 仅包含有权限查看的角色
++  if (["SUPER_ADMIN", "ADMIN", "ORDER_SPECIALIST", "SHIPPING_STAFF"].includes(user.role)) {
++    const deliveryDateOrders = await db.order.findMany({
++      where: {
++        status: {
++          in: ["CONFIRMED", "IN_PRODUCTION", "PARTIALLY_SHIPPED"],
++        },
++        subOrders: {
++          some: {
++            deliveryDate: {
++              lte: addDays(now, 7), // 7天内需要交付的订单
++            },
++            // 排除已经完全发运的子订单
++            shipping: {
++              every: {
++                NOT: {
++                  quantity: {
++                    gte: db.subOrder.fields.plannedQuantity,
++                  },
++                },
++              },
++            },
++          },
++        },
++      },
++      include: {
++        customer: {
++          select: {
++            name: true,
++          },
++        },
++        subOrders: {
++          where: {
++            deliveryDate: {
++              lte: addDays(now, 7),
++            },
++          },
++          select: {
++            id: true,
++            specification: true,
++            plannedQuantity: true,
++            deliveryDate: true,
++            shipping: {
++              select: {
++                quantity: true,
++              },
++            },
++          },
++        },
++      },
++      take: 10,
++    });
++    
++    // 将临近交期订单转换为提醒
++    for (const order of deliveryDateOrders) {
++      // 找出最近的交期日期
++      let earliestDate = new Date();
++      earliestDate.setFullYear(earliestDate.getFullYear() + 1); // 设置一个将来的日期
++      
++      for (const subOrder of order.subOrders) {
++        if (isBefore(subOrder.deliveryDate, earliestDate)) {
++          earliestDate = subOrder.deliveryDate;
++        }
++      }
++      
++      // 计算未完成数量
++      const total = order.subOrders.reduce((sum, so) => sum + so.plannedQuantity, 0);
++      const shipped = order.subOrders.reduce((sum, so) => {
++        return sum + so.shipping.reduce((shipSum, s) => shipSum + s.quantity, 0);
++      }, 0);
++      const remaining = total - shipped;
++      
++      // 根据交期紧急程度确定类型和优先级
++      const daysUntilDelivery = Math.ceil((earliestDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
++      
++      let alertType = "deadline";
++      let priority = 70;
++      
++      if (daysUntilDelivery <= 2) {
++        alertType = "urgent";
++        priority = 90;
++      } else if (daysUntilDelivery <= 4) {
++        priority = 80;
++      }
++      
++      alerts.push({
++        id: `deadline-order-${order.id}`,
++        type: alertType,
++        title: `交期临近: ${order.orderNumber}`,
++        description: `客户 ${order.customer.name} 的订单还有 ${daysUntilDelivery} 天到期，还剩 ${remaining} 支未发运`,
++        link: `/dashboard/orders/${order.id}`,
++        date: earliestDate,
++        priority,
++        isNew: false,
++      });
++    }
++  }
++  
++  // 查询生产延误信息
++  // 仅包含有权限查看的角色
++  if (["SUPER_ADMIN", "ADMIN", "PRODUCTION_STAFF"].includes(user.role)) {
++    const delayedProductions = await db.subOrder.findMany({
++      where: {
++        order: {
++          status: {
++            in: ["CONFIRMED", "IN_PRODUCTION"],
++          },
++        },
++        // 查找交期临近但生产进度不足的子订单
++        deliveryDate: {
++          lte: addDays(now, 10), // 10天内需要交付
++        },
++        production: {
++          // 检查生产进度
++          _sum: {
++            quantity: {
++              lt: 0.5, // 生产进度不足50%
++            },
++          },
++        },
++      },
++      include: {
++        order: {
++          select: {
++            id: true,
++            orderNumber: true,
++            customer: {
++              select: {
++                name: true,
++              },
++            },
++          },
++        },
++        production: {
++          select: {
++            quantity: true,
++          },
++        },
++      },
++      take: 10,
++    });
++    
++    // 将生产延误转换为提醒
++    for (const subOrder of delayedProductions) {
++      // 计算生产进度
++      const produced = subOrder.production.reduce((sum, p) => sum + p.quantity, 0);
++      const productionPercentage = Math.round((produced / subOrder.plannedQuantity) * 100);
++      
++      alerts.push({
++        id: `production-delay-${subOrder.id}`,
++        type: "warning",
++        title: `生产延误: ${subOrder.order.orderNumber}`,
++        description: `规格 ${subOrder.specification} 的生产进度仅为 ${productionPercentage}%，交期临近`,
++        link: `/dashboard/production?subOrderId=${subOrder.id}`,
++        date: subOrder.deliveryDate,
++        priority: 85,
++        isNew: false,
++      });
++    }
++  }
++  
++  // 按优先级排序
++  return alerts.sort((a, b) => b.priority - a.priority);
++} 
+\ No newline at end of file
+diff --git a/app/order/track/[orderNumber]/page.tsx b/app/order/track/[orderNumber]/page.tsx
+new file mode 100644
+index 0000000..fd5afc6
+--- /dev/null
++++ b/app/order/track/[orderNumber]/page.tsx
+@@ -0,0 +1,504 @@
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
++import { Progress } from "@/components/ui/progress";
++import { db } from "@/lib/db";
++import { formatDate, cn } from "@/lib/utils";
++import { notFound } from "next/navigation";
++import { Separator } from "@/components/ui/separator";
++import { OrderStatus } from "@prisma/client";
++import { Badge } from "@/components/ui/badge";
++import { 
++  CheckCircle2, 
++  Clock, 
++  Truck, 
++  Factory, 
++  PackageCheck, 
++  AlertCircle, 
++  Info,
++  Phone,
++  MapPin,
++  RefreshCw,
++  CalendarClock,
++  ArrowRightLeft
++} from "lucide-react";
++import Link from "next/link";
++
++interface OrderTrackPageProps {
++  params: {
++    orderNumber: string;
++  };
++}
++
++export default async function OrderTrackPage({ params }: OrderTrackPageProps) {
++  // 获取订单信息
++  const order = await db.order.findUnique({
++    where: {
++      orderNumber: params.orderNumber,
++    },
++    include: {
++      customer: true,
++      subOrders: {
++        include: {
++          production: {
++            orderBy: {
++              createdAt: 'desc',
++            },
++          },
++          shipping: {
++            orderBy: {
++              createdAt: 'desc',
++            },
++          },
++        },
++      },
++      // 获取审计日志用于显示状态变更历史
++      auditLogs: {
++        where: {
++          action: 'update_status',
++        },
++        orderBy: {
++          createdAt: 'desc',
++        },
++        take: 5,
++      },
++    },
++  });
++
++  if (!order) {
++    notFound();
++  }
++
++  // 计算生产和发运进度
++  const calculateProgress = () => {
++    let totalPlannedQuantity = 0;
++    let totalProducedQuantity = 0;
++    let totalShippedQuantity = 0;
++
++    order.subOrders.forEach((subOrder) => {
++      totalPlannedQuantity += subOrder.plannedQuantity;
++      
++      subOrder.production.forEach((prod) => {
++        totalProducedQuantity += prod.quantity;
++      });
++      
++      subOrder.shipping.forEach((ship) => {
++        totalShippedQuantity += ship.quantity;
++      });
++    });
++
++    const productionProgress = totalPlannedQuantity > 0 
++      ? Math.min(Math.round((totalProducedQuantity / totalPlannedQuantity) * 100), 100)
++      : 0;
++      
++    const shippingProgress = totalPlannedQuantity > 0 
++      ? Math.min(Math.round((totalShippedQuantity / totalPlannedQuantity) * 100), 100)
++      : 0;
++
++    return {
++      production: productionProgress,
++      shipping: shippingProgress,
++      totalPlannedQuantity,
++      totalProducedQuantity,
++      totalShippedQuantity,
++    };
++  };
++
++  const progress = calculateProgress();
++
++  // 获取订单当前阶段
++  const getOrderStage = (status: OrderStatus) => {
++    switch (status) {
++      case "DRAFT":
++        return 1;
++      case "CONFIRMED":
++        return 2;
++      case "IN_PRODUCTION":
++        return 3;
++      case "PARTIALLY_SHIPPED":
++        return 4;
++      case "COMPLETED":
++        return 5;
++      case "CANCELED":
++        return -1;
++      default:
++        return 1;
++    }
++  };
++
++  const orderStage = getOrderStage(order.status);
++
++  // 获取最新的生产和发运记录
++  const getLatestUpdate = () => {
++    let latestProduction = null;
++    let latestShipping = null;
++
++    for (const subOrder of order.subOrders) {
++      if (subOrder.production.length > 0 && (!latestProduction || new Date(subOrder.production[0].createdAt) > new Date(latestProduction.createdAt))) {
++        latestProduction = subOrder.production[0];
++      }
++      if (subOrder.shipping.length > 0 && (!latestShipping || new Date(subOrder.shipping[0].createdAt) > new Date(latestShipping.createdAt))) {
++        latestShipping = subOrder.shipping[0];
++      }
++    }
++
++    return { latestProduction, latestShipping };
++  };
++
++  const { latestProduction, latestShipping } = getLatestUpdate();
++
++  // 获取订单状态显示文本
++  const getStatusText = (status: OrderStatus) => {
++    switch (status) {
++      case "DRAFT":
++        return "草稿";
++      case "CONFIRMED":
++        return "已确认";
++      case "IN_PRODUCTION":
++        return "生产中";
++      case "PARTIALLY_SHIPPED":
++        return "部分发运";
++      case "COMPLETED":
++        return "已完成";
++      case "CANCELED":
++        return "已取消";
++      default:
++        return status;
++    }
++  };
++
++  // 获取状态标签样式
++  const getStatusBadgeVariant = (status: OrderStatus) => {
++    switch (status) {
++      case "DRAFT":
++        return "outline";
++      case "CONFIRMED":
++        return "secondary";
++      case "IN_PRODUCTION":
++        return "default";
++      case "PARTIALLY_SHIPPED":
++        return "default";
++      case "COMPLETED":
++        return "success";
++      case "CANCELED":
++        return "destructive";
++      default:
++        return "outline";
++    }
++  };
++
++  return (
++    <div className="container mx-auto px-4 py-8">
++      <div className="flex flex-col items-center mb-8">
++        <h1 className="text-3xl font-bold tracking-tight mb-2">球墨铸铁管订单跟踪</h1>
++        <div className="flex items-center gap-2">
++          <p className="text-lg text-muted-foreground">
++            订单号: <span className="font-semibold">{order.orderNumber}</span>
++          </p>
++          <Badge variant={getStatusBadgeVariant(order.status)}>
++            {getStatusText(order.status)}
++          </Badge>
++        </div>
++      </div>
++
++      <div className="grid gap-6 md:grid-cols-3">
++        {/* 客户信息卡片 */}
++        <Card>
++          <CardHeader>
++            <CardTitle className="flex items-center gap-2">
++              <Info className="h-5 w-5" />
++              客户信息
++            </CardTitle>
++          </CardHeader>
++          <CardContent className="space-y-4">
++            <div>
++              <p className="text-sm font-medium">客户名称</p>
++              <p className="text-base">{order.customer.name}</p>
++            </div>
++            {order.customer.contactName && (
++              <div>
++                <p className="text-sm font-medium">联系人</p>
++                <p className="text-base">{order.customer.contactName}</p>
++              </div>
++            )}
++            {order.customer.phone && (
++              <div className="flex items-center gap-2">
++                <Phone className="h-4 w-4 text-muted-foreground" />
++                <p className="text-base">{order.customer.phone}</p>
++              </div>
++            )}
++            {order.customer.address && (
++              <div className="flex items-start gap-2">
++                <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
++                <p className="text-base">{order.customer.address}</p>
++              </div>
++            )}
++          </CardContent>
++        </Card>
++
++        {/* 订单信息卡片 */}
++        <Card>
++          <CardHeader>
++            <CardTitle className="flex items-center gap-2">
++              <CalendarClock className="h-5 w-5" />
++              订单信息
++            </CardTitle>
++          </CardHeader>
++          <CardContent className="space-y-4">
++            <div>
++              <p className="text-sm font-medium">创建日期</p>
++              <p className="text-base">{formatDate(order.createdAt)}</p>
++            </div>
++            <div>
++              <p className="text-sm font-medium">最后更新</p>
++              <p className="text-base">{formatDate(order.updatedAt)}</p>
++            </div>
++            <div>
++              <p className="text-sm font-medium">发运方式</p>
++              <p className="text-base">
++                {order.shippingMethod === "SELF_DELIVERY" ? "厂家送货" : "客户自提"}
++              </p>
++            </div>
++            {order.shippingAddress && (
++              <div>
++                <p className="text-sm font-medium">发运地址</p>
++                <p className="text-base">{order.shippingAddress}</p>
++              </div>
++            )}
++          </CardContent>
++        </Card>
++
++        {/* 进度统计卡片 */}
++        <Card>
++          <CardHeader>
++            <CardTitle className="flex items-center gap-2">
++              <RefreshCw className="h-5 w-5" />
++              进度统计
++            </CardTitle>
++          </CardHeader>
++          <CardContent className="space-y-4">
++            <div>
++              <div className="flex justify-between mb-2">
++                <span className="text-sm font-medium">生产进度</span>
++                <span className="text-sm font-medium">{progress.production}%</span>
++              </div>
++              <Progress value={progress.production} className="h-2" />
++              <div className="mt-1 text-xs text-muted-foreground">
++                已生产 {progress.totalProducedQuantity} / 计划 {progress.totalPlannedQuantity} 支
++              </div>
++            </div>
++
++            <div>
++              <div className="flex justify-between mb-2">
++                <span className="text-sm font-medium">发运进度</span>
++                <span className="text-sm font-medium">{progress.shipping}%</span>
++              </div>
++              <Progress value={progress.shipping} className="h-2" />
++              <div className="mt-1 text-xs text-muted-foreground">
++                已发运 {progress.totalShippedQuantity} / 计划 {progress.totalPlannedQuantity} 支
++              </div>
++            </div>
++
++            {latestProduction && (
++              <div className="pt-2">
++                <p className="text-xs text-muted-foreground">最近生产: {formatDate(latestProduction.createdAt)}</p>
++              </div>
++            )}
++
++            {latestShipping && (
++              <div>
++                <p className="text-xs text-muted-foreground">最近发运: {formatDate(latestShipping.createdAt)}</p>
++              </div>
++            )}
++          </CardContent>
++        </Card>
++
++        {/* 订单进度跟踪 */}
++        <Card className="md:col-span-3">
++          <CardHeader>
++            <CardTitle>订单进度跟踪</CardTitle>
++            <CardDescription>
++              跟踪您的订单处理状态
++            </CardDescription>
++          </CardHeader>
++          <CardContent>
++            <div className="flex flex-col sm:flex-row justify-between mb-6 gap-4">
++              <div className="flex items-center gap-2">
++                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 1 ? 'bg-primary text-white' : 'bg-muted'}`}>
++                  <Clock className="h-5 w-5" />
++                </div>
++                <div>
++                  <p className="font-medium">订单确认</p>
++                  <p className="text-sm text-muted-foreground">
++                    {orderStage >= 2 ? formatDate(order.updatedAt) : '等待中'}
++                  </p>
++                </div>
++              </div>
++              <div className="hidden sm:block w-full h-0.5 self-center bg-border"></div>
++              <div className="flex items-center gap-2">
++                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 3 ? 'bg-primary text-white' : 'bg-muted'}`}>
++                  <Factory className="h-5 w-5" />
++                </div>
++                <div>
++                  <p className="font-medium">生产中</p>
++                  <p className="text-sm text-muted-foreground">
++                    {orderStage >= 3 ? '进行中' : '未开始'}
++                  </p>
++                </div>
++              </div>
++              <div className="hidden sm:block w-full h-0.5 self-center bg-border"></div>
++              <div className="flex items-center gap-2">
++                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 4 ? 'bg-primary text-white' : 'bg-muted'}`}>
++                  <Truck className="h-5 w-5" />
++                </div>
++                <div>
++                  <p className="font-medium">发运中</p>
++                  <p className="text-sm text-muted-foreground">
++                    {orderStage >= 4 ? '进行中' : '未开始'}
++                  </p>
++                </div>
++              </div>
++              <div className="hidden sm:block w-full h-0.5 self-center bg-border"></div>
++              <div className="flex items-center gap-2">
++                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${orderStage >= 5 ? 'bg-primary text-white' : 'bg-muted'}`}>
++                  <CheckCircle2 className="h-5 w-5" />
++                </div>
++                <div>
++                  <p className="font-medium">已完成</p>
++                  <p className="text-sm text-muted-foreground">
++                    {orderStage >= 5 ? formatDate(order.updatedAt) : '等待中'}
++                  </p>
++                </div>
++              </div>
++            </div>
++
++            {/* 状态变更历史 */}
++            {order.auditLogs && order.auditLogs.length > 0 && (
++              <div className="mt-6">
++                <h3 className="text-lg font-medium mb-2 flex items-center gap-2">
++                  <ArrowRightLeft className="h-4 w-4" />
++                  状态变更历史
++                </h3>
++                <div className="space-y-2">
++                  {order.auditLogs.map((log) => (
++                    <div key={log.id} className="text-sm border-l-2 border-primary pl-3 py-1">
++                      <p className="font-medium">{log.description}</p>
++                      <p className="text-xs text-muted-foreground">{formatDate(log.createdAt)}</p>
++                    </div>
++                  ))}
++                </div>
++              </div>
++            )}
++          </CardContent>
++        </Card>
++
++        {/* 订单详情 */}
++        <Card className="md:col-span-3">
++          <CardHeader>
++            <CardTitle>订单详情</CardTitle>
++            <CardDescription>
++              球墨铸铁管订单规格信息
++            </CardDescription>
++          </CardHeader>
++          <CardContent>
++            <div className="space-y-4">
++              {order.subOrders.map((subOrder, index) => (
++                <div key={subOrder.id} className="border rounded-lg p-4">
++                  <div className="flex justify-between items-center mb-2">
++                    <h3 className="font-semibold text-lg">子订单 {index + 1}</h3>
++                    <div className="flex gap-2 items-center">
++                      <p className="text-sm">交货日期: {formatDate(subOrder.deliveryDate)}</p>
++                      <Badge variant={subOrder.priorityLevel === "URGENT" || subOrder.priorityLevel === "CRITICAL" ? "destructive" : "outline"}>
++                        {subOrder.priorityLevel === "LOW" && "低优先级"}
++                        {subOrder.priorityLevel === "NORMAL" && "普通优先级"}
++                        {subOrder.priorityLevel === "HIGH" && "高优先级"}
++                        {subOrder.priorityLevel === "URGENT" && "紧急"}
++                        {subOrder.priorityLevel === "CRITICAL" && "特急"}
++                      </Badge>
++                    </div>
++                  </div>
++                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
++                    <div>
++                      <p className="text-sm font-medium">规格</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.specification}</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">级别</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.grade}</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">接口形式</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.interfaceType}</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">内衬</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.lining}</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">长度</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.length}</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">防腐措施</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.anticorrosion}</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">计划支数</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.plannedQuantity} 支</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">单重</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.unitWeight} kg</p>
++                    </div>
++                    <div>
++                      <p className="text-sm font-medium">总重</p>
++                      <p className="text-sm text-muted-foreground">{subOrder.totalWeight} kg</p>
++                    </div>
++                  </div>
++
++                  {/* 生产和发运记录 */}
++                  {(subOrder.production.length > 0 || subOrder.shipping.length > 0) && (
++                    <div className="mt-4 pt-4 border-t">
++                      <div className="grid gap-4 sm:grid-cols-2">
++                        {subOrder.production.length > 0 && (
++                          <div>
++                            <h4 className="text-sm font-medium mb-2">最近生产记录</h4>
++                            <div className="text-xs space-y-1">
++                              {subOrder.production.slice(0, 3).map((prod) => (
++                                <div key={prod.id} className="flex justify-between">
++                                  <span>{formatDate(prod.productionDate)}</span>
++                                  <span>{prod.quantity} 支</span>
++                                </div>
++                              ))}
++                            </div>
++                          </div>
++                        )}
++                        {subOrder.shipping.length > 0 && (
++                          <div>
++                            <h4 className="text-sm font-medium mb-2">最近发运记录</h4>
++                            <div className="text-xs space-y-1">
++                              {subOrder.shipping.slice(0, 3).map((ship) => (
++                                <div key={ship.id} className="flex justify-between">
++                                  <span>{formatDate(ship.shippingDate)}</span>
++                                  <span>{ship.quantity} 支</span>
++                                </div>
++                              ))}
++                            </div>
++                          </div>
++                        )}
++                      </div>
++                    </div>
++                  )}
++                </div>
++              ))}
++            </div>
++          </CardContent>
++          <CardFooter className="justify-center">
++            <Button variant="outline" asChild>
++              <Link href={`/`}>返回首页</Link>
++            </Button>
++          </CardFooter>
++        </Card>
++      </div>
++    </div>
++  );
++} 
+\ No newline at end of file
+diff --git a/components/ui/command.tsx b/components/ui/command.tsx
+new file mode 100644
+index 0000000..415986b
+--- /dev/null
++++ b/components/ui/command.tsx
+@@ -0,0 +1,155 @@
++"use client";
++
++import * as React from "react";
++import { DialogProps } from "@radix-ui/react-dialog";
++import { Command as CommandPrimitive } from "cmdk";
++import { Search } from "lucide-react";
++
++import { cn } from "@/lib/utils";
++import { Dialog, DialogContent } from "@/components/ui/dialog";
++
++const Command = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
++>(({ className, ...props }, ref) => (
++  <CommandPrimitive
++    ref={ref}
++    className={cn(
++      "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
++      className
++    )}
++    {...props}
++  />
++));
++Command.displayName = CommandPrimitive.displayName;
++
++interface CommandDialogProps extends DialogProps {}
++
++const CommandDialog = ({ children, ...props }: CommandDialogProps) => {
++  return (
++    <Dialog {...props}>
++      <DialogContent className="overflow-hidden p-0 shadow-lg">
++        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
++          {children}
++        </Command>
++      </DialogContent>
++    </Dialog>
++  );
++};
++
++const CommandInput = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive.Input>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
++>(({ className, ...props }, ref) => (
++  <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
++    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
++    <CommandPrimitive.Input
++      ref={ref}
++      className={cn(
++        "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
++        className
++      )}
++      {...props}
++    />
++  </div>
++));
++
++CommandInput.displayName = CommandPrimitive.Input.displayName;
++
++const CommandList = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive.List>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
++>(({ className, ...props }, ref) => (
++  <CommandPrimitive.List
++    ref={ref}
++    className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
++    {...props}
++  />
++));
++
++CommandList.displayName = CommandPrimitive.List.displayName;
++
++const CommandEmpty = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive.Empty>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
++>((props, ref) => (
++  <CommandPrimitive.Empty
++    ref={ref}
++    className="py-6 text-center text-sm"
++    {...props}
++  />
++));
++
++CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
++
++const CommandGroup = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive.Group>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
++>(({ className, ...props }, ref) => (
++  <CommandPrimitive.Group
++    ref={ref}
++    className={cn(
++      "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
++      className
++    )}
++    {...props}
++  />
++));
++
++CommandGroup.displayName = CommandPrimitive.Group.displayName;
++
++const CommandSeparator = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive.Separator>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
++>(({ className, ...props }, ref) => (
++  <CommandPrimitive.Separator
++    ref={ref}
++    className={cn("-mx-1 h-px bg-border", className)}
++    {...props}
++  />
++));
++CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
++
++const CommandItem = React.forwardRef<
++  React.ElementRef<typeof CommandPrimitive.Item>,
++  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
++>(({ className, ...props }, ref) => (
++  <CommandPrimitive.Item
++    ref={ref}
++    className={cn(
++      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
++      className
++    )}
++    {...props}
++  />
++));
++
++CommandItem.displayName = CommandPrimitive.Item.displayName;
++
++const CommandShortcut = ({
++  className,
++  ...props
++}: React.HTMLAttributes<HTMLSpanElement>) => {
++  return (
++    <span
++      className={cn(
++        "ml-auto text-xs tracking-widest text-muted-foreground",
++        className
++      )}
++      {...props}
++    />
++  );
++};
++CommandShortcut.displayName = "CommandShortcut";
++
++export {
++  Command,
++  CommandDialog,
++  CommandInput,
++  CommandList,
++  CommandEmpty,
++  CommandGroup,
++  CommandItem,
++  CommandShortcut,
++  CommandSeparator,
++}; 
+\ No newline at end of file
+diff --git a/components/ui/dialog.tsx b/components/ui/dialog.tsx
+new file mode 100644
+index 0000000..7369f63
+--- /dev/null
++++ b/components/ui/dialog.tsx
+@@ -0,0 +1,122 @@
++"use client";
++
++import * as React from "react";
++import * as DialogPrimitive from "@radix-ui/react-dialog";
++import { X } from "lucide-react";
++
++import { cn } from "@/lib/utils";
++
++const Dialog = DialogPrimitive.Root;
++
++const DialogTrigger = DialogPrimitive.Trigger;
++
++const DialogPortal = ({
++  ...props
++}: DialogPrimitive.DialogPortalProps) => (
++  <DialogPrimitive.Portal {...props} />
++);
++DialogPortal.displayName = DialogPrimitive.Portal.displayName;
++
++const DialogOverlay = React.forwardRef<
++  React.ElementRef<typeof DialogPrimitive.Overlay>,
++  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
++>(({ className, ...props }, ref) => (
++  <DialogPrimitive.Overlay
++    ref={ref}
++    className={cn(
++      "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
++      className
++    )}
++    {...props}
++  />
++));
++DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
++
++const DialogContent = React.forwardRef<
++  React.ElementRef<typeof DialogPrimitive.Content>,
++  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
++>(({ className, children, ...props }, ref) => (
++  <DialogPortal>
++    <DialogOverlay />
++    <DialogPrimitive.Content
++      ref={ref}
++      className={cn(
++        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg md:w-full",
++        className
++      )}
++      {...props}
++    >
++      {children}
++      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
++        <X className="h-4 w-4" />
++        <span className="sr-only">关闭</span>
++      </DialogPrimitive.Close>
++    </DialogPrimitive.Content>
++  </DialogPortal>
++));
++DialogContent.displayName = DialogPrimitive.Content.displayName;
++
++const DialogHeader = ({
++  className,
++  ...props
++}: React.HTMLAttributes<HTMLDivElement>) => (
++  <div
++    className={cn(
++      "flex flex-col space-y-1.5 text-center sm:text-left",
++      className
++    )}
++    {...props}
++  />
++);
++DialogHeader.displayName = "DialogHeader";
++
++const DialogFooter = ({
++  className,
++  ...props
++}: React.HTMLAttributes<HTMLDivElement>) => (
++  <div
++    className={cn(
++      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
++      className
++    )}
++    {...props}
++  />
++);
++DialogFooter.displayName = "DialogFooter";
++
++const DialogTitle = React.forwardRef<
++  React.ElementRef<typeof DialogPrimitive.Title>,
++  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
++>(({ className, ...props }, ref) => (
++  <DialogPrimitive.Title
++    ref={ref}
++    className={cn(
++      "text-lg font-semibold leading-none tracking-tight",
++      className
++    )}
++    {...props}
++  />
++));
++DialogTitle.displayName = DialogPrimitive.Title.displayName;
++
++const DialogDescription = React.forwardRef<
++  React.ElementRef<typeof DialogPrimitive.Description>,
++  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
++>(({ className, ...props }, ref) => (
++  <DialogPrimitive.Description
++    ref={ref}
++    className={cn("text-sm text-muted-foreground", className)}
++    {...props}
++  />
++));
++DialogDescription.displayName = DialogPrimitive.Description.displayName;
++
++export {
++  Dialog,
++  DialogTrigger,
++  DialogContent,
++  DialogHeader,
++  DialogFooter,
++  DialogTitle,
++  DialogDescription,
++}; 
+\ No newline at end of file
+diff --git a/lib/create-audit-log.ts b/lib/create-audit-log.ts
+new file mode 100644
+index 0000000..60314ce
+--- /dev/null
++++ b/lib/create-audit-log.ts
+@@ -0,0 +1,51 @@
++import { db } from "./db";
++import { getCurrentUser } from "./session";
++
++/**
++ * 创建审计日志
++ */
++export async function createAuditLog({
++  action,
++  resource,
++  resourceId,
++  description,
++  metadata,
++}: {
++  action: string;
++  resource: string;
++  resourceId?: string;
++  description: string;
++  metadata?: string;
++}) {
++  try {
++    const user = await getCurrentUser();
++    const userId = user?.id;
++    
++    // 获取客户端信息 - 在服务器端可以为空
++    let ipAddress = "";
++    let userAgent = "";
++    
++    if (typeof window !== "undefined") {
++      // 用户代理
++      userAgent = window.navigator.userAgent;
++    }
++    
++    await db.auditLog.create({
++      data: {
++        userId,
++        action,
++        resource,
++        resourceId,
++        description,
++        metadata,
++        ipAddress,
++        userAgent,
++      },
++    });
++    
++    return { success: true };
++  } catch (error) {
++    console.error("创建审计日志失败:", error);
++    return { success: false, error: "创建审计日志失败" };
++  }
++} 
+\ No newline at end of file
+diff --git a/lib/session.ts b/lib/session.ts
+new file mode 100644
+index 0000000..35d3371
+--- /dev/null
++++ b/lib/session.ts
+@@ -0,0 +1,33 @@
++import { auth } from "./auth";
++import { db } from "./db";
++
++/**
++ * 获取当前登录用户信息
++ */
++export async function getCurrentUser() {
++  try {
++    const session = await auth();
++    
++    if (!session?.user?.id) {
++      return null;
++    }
++    
++    const user = await db.user.findUnique({
++      where: {
++        id: session.user.id,
++      },
++      select: {
++        id: true,
++        name: true,
++        email: true,
++        role: true,
++        image: true,
++      },
++    });
++    
++    return user;
++  } catch (error) {
++    console.error("获取当前用户失败:", error);
++    return null;
++  }
++} 
+\ No newline at end of file
+diff --git a/package-lock.json b/package-lock.json
+index 512a5e4..c43a329 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -16,7 +16,7 @@
+         "@radix-ui/react-alert-dialog": "^1.0.5",
+         "@radix-ui/react-avatar": "^1.0.4",
+         "@radix-ui/react-checkbox": "^1.0.4",
+-        "@radix-ui/react-dialog": "^1.0.5",
++        "@radix-ui/react-dialog": "^1.1.13",
+         "@radix-ui/react-dropdown-menu": "^2.0.6",
+         "@radix-ui/react-label": "^2.0.2",
+         "@radix-ui/react-popover": "^1.0.7",
+@@ -37,12 +37,13 @@
+         "chart.js": "^4.4.1",
+         "class-variance-authority": "^0.7.0",
+         "clsx": "^2.1.0",
+-        "cmdk": "^0.2.0",
++        "cmdk": "^0.2.1",
+         "date-fns": "^3.3.1",
+         "dayjs": "^1.11.10",
+         "echarts": "^5.4.3",
+         "echarts-for-react": "^3.0.2",
+         "exceljs": "^4.4.0",
++        "jose": "^6.0.11",
+         "jsonwebtoken": "^9.0.2",
+         "jspdf": "^2.5.1",
+         "jspdf-autotable": "^3.8.1",
+@@ -59,6 +60,7 @@
+         "react-dropzone": "^14.2.3",
+         "react-hook-form": "^7.50.1",
+         "react-hot-toast": "^2.4.1",
++        "react-qr-code": "^2.0.15",
+         "recharts": "^2.15.3",
+         "sonner": "^1.4.0",
+         "tailwind-merge": "^2.2.1",
+@@ -127,6 +129,17 @@
+         }
+       }
+     },
++    "node_modules/@auth/core/node_modules/jose": {
++      "version": "5.10.0",
++      "resolved": "https://registry.npmmirror.com/jose/-/jose-5.10.0.tgz",
++      "integrity": "sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==",
++      "license": "MIT",
++      "optional": true,
++      "peer": true,
++      "funding": {
++        "url": "https://github.com/sponsors/panva"
++      }
++    },
+     "node_modules/@auth/prisma-adapter": {
+       "version": "1.6.0",
+       "resolved": "https://registry.npmmirror.com/@auth/prisma-adapter/-/prisma-adapter-1.6.0.tgz",
+@@ -170,6 +183,15 @@
+         }
+       }
+     },
++    "node_modules/@auth/prisma-adapter/node_modules/jose": {
++      "version": "5.10.0",
++      "resolved": "https://registry.npmmirror.com/jose/-/jose-5.10.0.tgz",
++      "integrity": "sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/panva"
++      }
++    },
+     "node_modules/@babel/runtime": {
+       "version": "7.27.1",
+       "resolved": "https://registry.npmmirror.com/@babel/runtime/-/runtime-7.27.1.tgz",
+@@ -6337,9 +6359,9 @@
+       }
+     },
+     "node_modules/jose": {
+-      "version": "5.10.0",
+-      "resolved": "https://registry.npmmirror.com/jose/-/jose-5.10.0.tgz",
+-      "integrity": "sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==",
++      "version": "6.0.11",
++      "resolved": "https://registry.npmmirror.com/jose/-/jose-6.0.11.tgz",
++      "integrity": "sha512-QxG7EaliDARm1O1S8BGakqncGT9s25bKL1WSf6/oa17Tkqwi8D2ZNglqCF+DsYF88/rV66Q/Q2mFAy697E1DUg==",
+       "license": "MIT",
+       "funding": {
+         "url": "https://github.com/sponsors/panva"
+@@ -7766,6 +7788,12 @@
+         "node": ">=6"
+       }
+     },
++    "node_modules/qr.js": {
++      "version": "0.0.0",
++      "resolved": "https://registry.npmmirror.com/qr.js/-/qr.js-0.0.0.tgz",
++      "integrity": "sha512-c4iYnWb+k2E+vYpRimHqSu575b1/wKl4XFeJGpFmrJQz5I88v9aY2czh7s0w36srfCM1sXgC/xpoJz5dJfq+OQ==",
++      "license": "MIT"
++    },
+     "node_modules/qrcode": {
+       "version": "1.5.4",
+       "resolved": "https://registry.npmmirror.com/qrcode/-/qrcode-1.5.4.tgz",
+@@ -7917,6 +7945,19 @@
+       "integrity": "sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==",
+       "license": "MIT"
+     },
++    "node_modules/react-qr-code": {
++      "version": "2.0.15",
++      "resolved": "https://registry.npmmirror.com/react-qr-code/-/react-qr-code-2.0.15.tgz",
++      "integrity": "sha512-MkZcjEXqVKqXEIMVE0mbcGgDpkfSdd8zhuzXEl9QzYeNcw8Hq2oVIzDLWuZN2PQBwM5PWjc2S31K8Q1UbcFMfw==",
++      "license": "MIT",
++      "dependencies": {
++        "prop-types": "^15.8.1",
++        "qr.js": "0.0.0"
++      },
++      "peerDependencies": {
++        "react": "*"
++      }
++    },
+     "node_modules/react-remove-scroll": {
+       "version": "2.6.3",
+       "resolved": "https://registry.npmmirror.com/react-remove-scroll/-/react-remove-scroll-2.6.3.tgz",
+diff --git a/package.json b/package.json
+index e3fdc37..16481b7 100644
+--- a/package.json
++++ b/package.json
+@@ -26,7 +26,7 @@
+     "@radix-ui/react-alert-dialog": "^1.0.5",
+     "@radix-ui/react-avatar": "^1.0.4",
+     "@radix-ui/react-checkbox": "^1.0.4",
+-    "@radix-ui/react-dialog": "^1.0.5",
++    "@radix-ui/react-dialog": "^1.1.13",
+     "@radix-ui/react-dropdown-menu": "^2.0.6",
+     "@radix-ui/react-label": "^2.0.2",
+     "@radix-ui/react-popover": "^1.0.7",
+@@ -47,7 +47,7 @@
+     "chart.js": "^4.4.1",
+     "class-variance-authority": "^0.7.0",
+     "clsx": "^2.1.0",
+-    "cmdk": "^0.2.0",
++    "cmdk": "^0.2.1",
+     "date-fns": "^3.3.1",
+     "dayjs": "^1.11.10",
+     "echarts": "^5.4.3",
+@@ -70,6 +70,7 @@
+     "react-dropzone": "^14.2.3",
+     "react-hook-form": "^7.50.1",
+     "react-hot-toast": "^2.4.1",
++    "react-qr-code": "^2.0.15",
+     "recharts": "^2.15.3",
+     "sonner": "^1.4.0",
+     "tailwind-merge": "^2.2.1",
+diff --git a/public/icon.png b/public/icon.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea2f437d9db6552726693be6cc2943a32dc5a964
+GIT binary patch
+literal 15086
+zcmdU$X^c%<7ROI1lv$Z)$~+GtJY$|F!80Yq2f;&#Xd>NSTKFL46_E}iL5mO)AEZS|
+zhz??kp>#q_Pa+X9S9!)q#7v>f>h;_1zJ2P{J?EY~6zP?$I_K=Y*ZTkWKIiUX?Ol$O
+z;bc0!dO3Q{aq`<cPCv(Sa&jWi*^YBp)3WtS{+}y4&fm2_CoQ8U&P-L(jkNoEN%P;D
+z>JLhPRsE;xZ>o<~Kd63*DEFk1M;XdugYEZ_Oa-Nh{-%0D^{MKAR3)TR78`8wfiHZP
+zw^UGo?y4J9e^;e_!*cd3hmYSYR;;*T(V|5?L<EfTkcR3sSM|QCAD5)l2Mib>_wL<$
+z@a);MWqJ=*I%S|bJEdBpnlwj0+s2I>%gK``wdqCHu3cM_nVAU|n5l~P2F}l_<<jQr
+zS1MPoEbG^=H{8#kKQGOjH@EErCfIODMk=Y%FRHIpt<SVyr%#_Q@7}$WSFc{lxN+mW
+z{=tR=ToMub0_@(ZdVQwtxlf-ya_7z+)AsAutrPtX$MOvaxWFl_@ZMgk#`2ezv<3|t
+z$dMyQ4EIZyE=kLlEra~R1x{gPkQSnE4Dy#!9__q(^=iZY_3PI%VZwwk{@?_+Afewn
+zsT#&#(q$%3o-FW2Hg4P~l`2&V>kDo{eQU1fr(;a=<<p}_54myUhT(qs@@2`%$?+{4
+zqaEP}$5_%s6GMMD85tSUv13OWI&`SCY11YYhq`s^%KrWP4fi*1-pHg$lS0`kFLyaO
+z!qqJq`mjOOT`usRG3VmNi}LByCpmHAgw(EGJFq<U&CSh~l9Cd`fAi+erteP#(^VF(
+zaJIty>7HsJ2X}tEcJ1Wh!-s|o-vjk==X>vm4I3s;pFTC^uUxqj`ki_GM4sUaXDiGB
+z1M$82Uj9v*H1V}>)TogZ6ciZlZ{NNZe!tdVl`2)FLWK&^XPX}43TK2l_;J;Qe7O1F
+zym?dn_`_}G%9Zlv%NN6c>(;H3m6c_%YSyeNGiT0}YSpSGgdO1uXSn~M`bQ)!w4bp2
+zM~)mR&!0ax+^=4}D(&01k7CT8JzEYQJSbJGR*j}5zyr>3|BGrOYY&6v=6~zfEos`c
+zX&DZrojG&HaA%G)b?Ve;nGPK~n0}ObC*M#4ylq)H!=3e<O$&XE$6x2bvS!U1!<|3d
+zw{MT~<onsSZJWtEe*AbeJqaFg|1AkSar3`@`*xZ3A3Jueym;}#aJ+Wyni(rB&cJ~K
+z<>kwl>EI7{*43fg-In$8Z`Q0?)JKaJE#$(53x?l^4<BU4j2Y29?D<W6{P-~){B4||
+zlz+=H=<3Ixxr|+pKyb&79c6x>Y2;5_qa=u@U!I#kb9lRMnmBQyS&P7(aji?2E@j##
+zjr`%B)O^j$pT4G5t5(9C3@I)y7W&6n^-m*zxbqHT;sm98`L}J`RyJ+gWVrKZ=gytJ
+z<5C*=!#yp(Uya>F=k$yR-MV%2ZId+ew=q3mEWdZ)Zhz*&j~_oaZBM^4ckbLke`(}T
+z|C#dm75!-RX7}#hQoVZhZ^a+(DbF7)|GRhZO3$7>1G)1))71WU{=gh4rTH8DS;x$u
+zKR+(_H1fCeH|C(sMMGiRa`ZP39z3v3FMIdy73RY>Kj@mK_J=dvk%ZST+1c5qkGy{U
+zx|}+7D%5wQIHrEXhYy$c@86rcA3l6Ix*o9kA+L7*qQ%WxETQ!y82nC&L)EHPD^$B%
+zUiIqLGizbiz|8Y(dIDGP`Y}Uo6I#C~fRzltcsAbkyV5Z+iO}(r@5nz^`~?0;xyP>*
+zBVOAE<p;&D;QvkHhbh$IWP~GJ{iNLEw+bB8#(sHxH}T@PwoX6mO}WO;6Rblb@pJ0%
+zP4+KB)*+ew3+nJq_K)J!;g#n965*nkgr%Zd@GY^I=J#EeS2~zr!y#2E*Zor^=Wc@%
+zeLkg{j{Q@2z3E$XRm<~T;2VsfJr>PQS}LezcU8u3`m?0g{%YrLZ+zejpZEr&yd_fs
+z{vXe8#A+Aj;Qds;%lR3RqAbz38P#IPX~naS80-j1fer>-^K`?8s}ki8FWvd|Yv9`X
+z(Q(vF4ZjY0PVN6)i%8FMoC2=;*1Xp|(slOhy^@?x$-`L;oC4Bg@G2r*c{6aj>tpN5
+z;+1;ab`YNRPqdv1BJF0|(Y7mPjDBr*KH?nJp{mhyTG{%LoX}TyR$ZXFSM{dq8&&#5
+zlzY<1qYP!!(ZBP1WF5anwNUl5s@5`4DMQ&UBSwt)K^KF`@@T3))~IqGD;{Q<eBze6
+zxAsiqHu%6-BGOk2|64Vwew2L-VvfXrd-dvt4}9S>jQmLp-B2x4r?6?WX3a8t6!YfI
+zbNj$2zJrAR>bk1iE}{Frefx4=OZM#9BQ<K&@Y>=Vj99`uI<4xp3H{u#VMAfx2z+gK
+zKRYnI-veXY>Qu1VpU^X2X8&Ztf(3rqHXST5t@PKMKU8ggsVn=C?59qfHqCc$e#(?7
+z=DgFsefz@1o4^7S;WxfnwG^iNnX?$gw1_{)+7Is3sgn>dx_|$^aCXUU8*mRM*j-c$
+z1In2_{YQ@;32{vKeik;g4SPYHUs$+sp~0?SzrJrfxp2S)oBlGeU*jBzAO39J3n50y
+z`48ev#E|mx@}y3kI`P^8OxvFami5E$-o3l9N6C4Ke*O9xABz_+ma}KihK+qOUc~Kd
+zzz3tSurRuxMT{*!Ki};CvqzzR%pN+wJ<gwmjJ<*V8rvX^g-_r1`SWKvbm))}v&6oC
+z|NbWa$R1}%e6SfmL*W+{6`B2DV(Hwox54>TYo7$Z9lxVKtS|S~UH`6KyPCe0AnTGP
+zOG?=#i66TCsWW{X?SAy=QQ_Q^n`aXEV2Aqt=zrKl;+)KrCr@PX;K8M^;gJMB*!%{{
+z_;RPw{`74K{mjy(ONDb&?lRmbfp6z)ar+;O&-h0F=EY6|-}XOo`(MUY&UCT|JY>j_
+znAqSm_Os_l{}W=*qfl+YjywL)*7T?JtwCp^_{}p$>bx_s99&iH_@lRGEc6|JBjtVT
+zokYHS`~^Sd`A32rR!1<wwvzJvOC5!2qgeAV%OU0YXB-Ye^H0lxIda@SDGpAocEBgT
+z!$?Z&4+U`JC%XQy{P-T$s6O@hbNh~Wk1amD^KDHEB`K{x6@j%YK2nu(TYt;T+9G)w
+zqA%%JjXnHWtkD)i3q=~GC{XTbo`w*tI&s97<6020FH&Fl#5WjVfeAKo3c?aOs?j(_
+z{1v-KP@JDs^Hm?HGM1p+=j$27pLD3COe|@viT_Z2p<3qqVLrcn`SKT|MvbBjW!=K_
+zzf{ZE*|a%x=E$;T%Y<`=k+RlDWqrnH)Ydze3>q{@cJ12bJ@bbRw$%5zwP#FJo@PuU
+zjc3-pqeqX9`j3>w2HRbcXOqu4fzzi?NB=)!#flZOYSk*~+_`hCu@l?-ZhPh=*mJ&&
+z@s9JVy?ghTEnBw4Ix~%JsW}GroIPg#df>nT88c>#Ig^G@&Lz9CBDQ7hIfKf%80LhG
+z(X2-T>`U=)-MY0|r=L4_PB@ncUVuHerP_~m;IU)JWc>K?QLdb+<J<vz{~rF>mU@4D
+zAIvA*|69Yi$NbuzrgrxImHB==7+y^KY`-5ZZocQh@7Lp#viAGM9^o0EF@Har4la3=
+q@!D#Vku3e|`}>XLQ6?(ItsJLFQwlOQrkn9qqnVx?n@?G6u>CIsZs3vt
+
+literal 0
+HcmV?d00001
+
+-- 
+2.48.1.windows.1
+
