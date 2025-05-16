@@ -1,16 +1,24 @@
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { auth } from "@/lib/auth";
 import { UserRole } from "@/types";
+import { getToken } from "next-auth/jwt";
 
 const execAsync = promisify(exec);
 
+// 强制使用动态路由
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
+    // 从请求中获取令牌而非使用auth()
+    const token = await getToken({ 
+      req: req as any,
+      secret: process.env.NEXTAUTH_SECRET 
+    });
+    
     // 验证管理员身份
-    const session = await auth();
-    if (!session?.user || ![UserRole.SUPER_ADMIN, UserRole.ADMIN].includes(session.user.role as UserRole)) {
+    if (!token?.role || ![UserRole.SUPER_ADMIN, UserRole.ADMIN].includes(token.role as UserRole)) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
     
