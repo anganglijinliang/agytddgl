@@ -15,6 +15,7 @@ const getSecretKey = () => {
 export async function middleware(req: NextRequest) {
   const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
   const { pathname } = req.nextUrl;
+  const origin = req.nextUrl.origin;
   
   // 特殊处理静态资源和favicon.ico请求 - 直接跳过中间件处理
   if (
@@ -125,8 +126,18 @@ export async function middleware(req: NextRequest) {
     "/simple-login",
     "/auth-debug",
     "/health-check",
-    "/order/track" // 添加订单追踪页面为公开路由
+    "/order/track", // 添加订单追踪页面为公开路由
+    "/icon",
   ];
+  
+  // 处理图标请求
+  if (pathname.startsWith('/icon/')) {
+    // 如果是图标请求，重定向到favicon.ico或其他适当的图标
+    if (pathname === '/icon/small') {
+      return NextResponse.redirect(new URL('/favicon.ico', origin));
+    }
+    return NextResponse.redirect(new URL('/favicon.ico', origin));
+  }
   
   // 检查路径是否为公开路由或是否以公开路径开头
   const isPublicPath = publicPaths.some(path => 

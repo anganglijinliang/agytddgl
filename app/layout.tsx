@@ -14,10 +14,17 @@ export const metadata: Metadata = {
     template: "%s | 安钢集团永通球墨铸铁管订单管理系统"
   },
   description: "安钢集团永通球墨铸铁管订单管理系统 - 专业的生产和发货流程管理平台",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/icon.png"
+    icon: [
+      { url: "/favicon.ico" }
+    ],
+    shortcut: [
+      { url: "/favicon.ico" }
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png" }
+    ]
   }
 };
 
@@ -48,6 +55,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <meta charSet="utf-8" />
+      </head>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
