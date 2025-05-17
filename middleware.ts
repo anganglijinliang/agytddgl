@@ -11,11 +11,76 @@ const getSecretKey = () => {
   return new TextEncoder().encode(secret);
 };
 
+// 检查是否有重定向循环
+const checkRedirectLoop = (req: NextRequest) => {
+  // 从URL参数中获取重定向次数
+  const redirectCount = parseInt(req.nextUrl.searchParams.get('redirectCount') || '0');
+  
+  // 如果重定向次数超过5次，认为是循环重定向，返回true
+  return redirectCount >= 5;
+};
+
+// 为URL添加或更新重定向计数器
+const incrementRedirectCount = (url: URL) => {
+  const currentCount = parseInt(url.searchParams.get('redirectCount') || '0');
+  url.searchParams.set('redirectCount', (currentCount + 1).toString());
+  return url;
+};
+
 // 中间件函数，处理每个请求
 export async function middleware(req: NextRequest) {
   const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
   const { pathname } = req.nextUrl;
   const origin = req.nextUrl.origin;
+  
+  // 检测是否存在重定向循环
+  if (checkRedirectLoop(req)) {
+    console.log(`[${requestId}] 检测到重定向循环，强制进入静态仪表盘`);
+    // 如果是仪表盘相关页面，重定向到静态仪表盘
+    if (pathname.includes('/dashboard')) {
+      const staticDashboardUrl = new URL('/static-dashboard', req.url);
+      return NextResponse.rewrite(staticDashboardUrl);
+    }
+    
+    // 如果是登录页面，添加错误提示
+    if (pathname === '/login') {
+      const loginWithErrorUrl = new URL('/login', req.url);
+      loginWithErrorUrl.searchParams.set('error', 'redirect_loop');
+      return NextResponse.redirect(loginWithErrorUrl);
+    }
+    
+    // 对于其他页面，返回简单的静态页面
+    return new Response(
+      `<!DOCTYPE html>
+      <html>
+        <head>
+          <title>系统暂时不可用</title>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; }
+            h1 { color: #e11d48; }
+            .button { display: inline-block; background: #2563eb; color: white; padding: 0.5rem 1rem; 
+                      text-decoration: none; border-radius: 0.25rem; margin-top: 1rem; }
+          </style>
+        </head>
+        <body>
+          <h1>系统暂时不可用</h1>
+          <p>系统正在维护中，请稍后再试。</p>
+          <p>可能原因：数据库连接问题或身份验证服务不可用。</p>
+          <a href="/" class="button">返回首页</a>
+          <a href="/static-dashboard" class="button">查看静态数据</a>
+        </body>
+      </html>`,
+      {
+        status: 503,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    );
+  }
   
   // 特殊处理静态资源和favicon.ico请求 - 直接跳过中间件处理
   if (
@@ -23,7 +88,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/static/") ||
     pathname.startsWith("/images/") ||
-    pathname.includes(".")
+    pathname.includes(".") ||
+    pathname === "/static-dashboard" // 新增：静态仪表盘直接放行
   ) {
     return NextResponse.next();
   }
@@ -128,6 +194,7 @@ export async function middleware(req: NextRequest) {
     "/health-check",
     "/order/track", // 添加订单追踪页面为公开路由
     "/icon",
+    "/static-dashboard", // 添加静态仪表盘为公开路由
   ];
   
   // 处理图标请求
@@ -151,6 +218,9 @@ export async function middleware(req: NextRequest) {
     if (isAuthenticated && (pathname === "/login" || pathname === "/" || pathname === "/simple-login" || pathname === "/test-login")) {
       console.log(`[${requestId}] 已认证用户访问登录页，重定向到dashboard`);
       const redirectUrl = new URL("/dashboard", req.url);
+      
+      // 添加重定向计数器
+      incrementRedirectCount(redirectUrl);
       
       // 确保设置正确的响应头，防止缓存
       const redirectResponse = NextResponse.redirect(redirectUrl, {
@@ -184,6 +254,9 @@ export async function middleware(req: NextRequest) {
     // 添加原始URL作为查询参数，以便登录后重定向回来
     redirectUrl.searchParams.set("callbackUrl", pathname);
     
+    // 添加重定向计数器
+    incrementRedirectCount(redirectUrl);
+    
     const redirectResponse = NextResponse.redirect(redirectUrl, {
       // 使用302重定向，确保浏览器重定向过程正确
       status: 302,
@@ -197,6 +270,12 @@ export async function middleware(req: NextRequest) {
     });
     
     return redirectResponse;
+  }
+
+  // 已认证用户访问仪表盘但数据库可能有问题，使用静态仪表盘
+  if (pathname.includes('/dashboard') && req.nextUrl.searchParams.has('db_error')) {
+    console.log(`[${requestId}] 检测到数据库错误，使用静态仪表盘`);
+    return NextResponse.rewrite(new URL('/static-dashboard', req.url));
   }
 
   // 已认证用户，继续请求
