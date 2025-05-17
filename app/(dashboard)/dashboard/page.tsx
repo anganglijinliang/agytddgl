@@ -21,6 +21,17 @@ const USE_STATIC_VERSION = true;
 export default async function DashboardPage() {
   console.log("服务器端渲染DashboardPage");
   
+  // 如果使用静态版本，则跳过验证直接返回静态组件
+  if (USE_STATIC_VERSION) {
+    console.log("使用静态仪表盘版本，跳过用户验证和数据库查询");
+    return (
+      <Suspense fallback={<div className="p-8 text-center">正在加载仪表盘...</div>}>
+        <DashboardStatic />
+      </Suspense>
+    );
+  }
+  
+  // 只有在非静态版本时才进行身份验证
   // 验证用户是否已登录
   let session;
   try {
@@ -34,16 +45,6 @@ export default async function DashboardPage() {
   } catch (authError) {
     console.error("验证用户身份时出错:", authError);
     redirect("/login?error=auth");
-  }
-  
-  // 如果使用静态版本，直接返回不进行数据库查询
-  if (USE_STATIC_VERSION) {
-    console.log("使用静态仪表盘版本，跳过数据库查询");
-    return (
-      <Suspense fallback={<div className="p-8 text-center">正在加载仪表盘...</div>}>
-        <DashboardStatic />
-      </Suspense>
-    );
   }
   
   // 以下是动态版本的逻辑，仅在USE_STATIC_VERSION=false时执行
