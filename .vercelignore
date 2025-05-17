@@ -1,0 +1,13 @@
+
+# Ignore unnecessary files to reduce bundle size
+node_modules
+.next
+.git
+.vercel
+.DS_Store
+*.log
+*.lock
+README.md
+LICENSE
+.env*
+!.env.production
