@@ -12,10 +12,9 @@
     }
   ],
   "env": {
-    "NEXTAUTH_URL": "https://agytddgl.vercel.app",
+    "NEXTAUTH_URL": "https://agytddgl-pypwpxpnp-anganglijinliang-s-team.vercel.app",
     "DATABASE_URL": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
     "NEXTAUTH_SECRET": "+P5qXGcf8ZiuXSgs4Wyv4rXHGPGJqiLAFVsgqRwp0wE=",
-    "CRON_API_KEY": "${CRON_API_KEY}",
     "NODE_ENV": "production",
     "SKIP_DB_SYNC": "false",
     "POSTGRES_URL": "postgres://neondb_owner:npg_TqiB2gGU3ZyV@ep-still-credit-a1jseqhu-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
