@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { 
   AlertCircle, 
   Bell,
-  Info,
+  Info, 
   X 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -76,12 +76,12 @@ export function SmartAlert({
   const router = useRouter();
   const [visibleAlerts, setVisibleAlerts] = useState<AlertItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // 初始化并按优先级排序提醒
   useEffect(() => {
     if (alerts && alerts.length > 0) {
-      const sortedAlerts = [...alerts].sort((a, b) => b.priority - a.priority);
-      setVisibleAlerts(sortedAlerts);
+    const sortedAlerts = [...alerts].sort((a, b) => b.priority - a.priority);
+    setVisibleAlerts(sortedAlerts);
     } else {
       // 如果没有提供提醒数据，使用示例数据
       setVisibleAlerts(sampleAlerts);
@@ -167,49 +167,49 @@ export function SmartAlert({
       </CardHeader>
       <CardContent className="p-2 max-h-[350px] overflow-y-auto">
         {visibleAlerts.length === 0 ? (
-          <div className="flex items-center justify-center p-6 text-muted-foreground">
+                <div className="flex items-center justify-center p-6 text-muted-foreground">
             <p>当前没有需要注意的提醒</p>
-          </div>
-        ) : (
+                </div>
+              ) : (
           <div className="space-y-2">
             {visibleAlerts.map((alert) => (
-              <div
-                key={alert.id}
+                  <div
+                    key={alert.id}
                 className={`flex items-start p-3 rounded-lg border cursor-pointer transition-colors hover:bg-accent ${getAlertColor(alert.type)} ${alert.isNew ? "border-l-[3px]" : ""}`}
-                onClick={() => handleAlertClick(alert)}
-              >
-                <div className="mr-2 mt-0.5">
-                  {getAlertIcon(alert.type)}
-                </div>
-                <div className="flex-1 ml-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-sm">
-                      {alert.title}
-                      {alert.isNew && (
-                        <Badge variant="default" className="ml-2 text-[10px] px-1 py-0 h-4">
-                          新
-                        </Badge>
-                      )}
-                    </h4>
-                    {onDismiss && (
-                      <button
+                    onClick={() => handleAlertClick(alert)}
+                  >
+                    <div className="mr-2 mt-0.5">
+                      {getAlertIcon(alert.type)}
+                    </div>
+                    <div className="flex-1 ml-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">
+                          {alert.title}
+                          {alert.isNew && (
+                            <Badge variant="default" className="ml-2 text-[10px] px-1 py-0 h-4">
+                              新
+                            </Badge>
+                          )}
+                        </h4>
+                          {onDismiss && (
+                            <button
                         aria-label="关闭提醒"
                         title="关闭提醒"
-                        onClick={(e) => handleDismiss(e, alert.id)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
+                              onClick={(e) => handleDismiss(e, alert.id)}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {alert.description}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {alert.description}
-                  </p>
-                </div>
-              </div>
             ))}
-          </div>
-        )}
+                  </div>
+              )}
       </CardContent>
       {visibleAlerts.length > 0 && (
         <CardFooter className="pt-0">
@@ -219,9 +219,9 @@ export function SmartAlert({
             className="w-full" 
             onClick={onViewAll}
           >
-            查看所有提醒
-          </Button>
-        </CardFooter>
+          查看所有提醒
+        </Button>
+      </CardFooter>
       )}
     </Card>
   );

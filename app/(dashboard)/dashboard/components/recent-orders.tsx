@@ -61,16 +61,19 @@ export function RecentOrders() {
     const fetchOrders = async () => {
       try {
         setLoading(true);
+        // 尝试获取API数据，如果API不存在，会进入catch块
         const response = await fetch('/api/orders/recent');
         
         if (response.ok) {
           const data = await response.json();
           setOrders(data);
         } else {
+          // API返回错误状态码，立即使用示例数据
           console.log('API返回错误状态码，使用示例数据');
           setOrders(sampleOrders);
         }
       } catch (error) {
+        // API调用失败（可能API不存在），立即使用示例数据
         console.error("获取订单数据失败:", error);
         setOrders(sampleOrders);
       } finally {
@@ -87,7 +90,7 @@ export function RecentOrders() {
         setOrders(sampleOrders);
         setLoading(false);
       }
-    }, 5000);
+    }, 3000); // 将超时时间从5000ms缩短到3000ms，更快地回退到示例数据
 
     return () => clearTimeout(timeout);
   }, []);

@@ -45,10 +45,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           const data = await response.json();
           setAlerts(data);
         } else {
-          console.error('获取提醒失败');
+          console.error('获取提醒失败，使用示例数据');
+          // 使用组件内部示例数据
+          setAlerts([]);
         }
       } catch (error) {
         console.error('获取提醒出错:', error);
+        // 发生错误时使用空数组，避免重复请求
+        setAlerts([]);
       }
     };
 
@@ -58,7 +62,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       const fetchStatistics = async () => {
         try {
           // 这里实际项目中应当有一个专门的API获取统计数据
-          // 这里仅作示例
+          // 失败时直接使用示例数据
           setStatistics({
             totalOrders: 124,
             inProduction: 38,

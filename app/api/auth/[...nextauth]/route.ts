@@ -45,6 +45,13 @@ const logJwtError = (error: Error, stage: string) => {
     message: error.message,
     stack: error.stack?.split('\n').slice(0, 3).join('\n') || '无堆栈信息'
   });
+  
+  // 添加更多关于环境变量的信息以便调试
+  if (error.message.includes('jwt') || error.message.includes('JWE') || error.message.includes('JWS')) {
+    console.error('[NextAuth][JWT] 可能的JWT配置问题，请检查NEXTAUTH_SECRET环境变量');
+    console.error(`NEXTAUTH_SECRET长度: ${process.env.NEXTAUTH_SECRET?.length || 0}`);
+    console.error(`使用备用密钥: ${!process.env.NEXTAUTH_SECRET}`);
+  }
 };
 
 // 认证选项配置

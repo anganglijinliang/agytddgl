@@ -44,11 +44,25 @@ const maxValue = Math.max(
 
 export function Overview() {
   const [isClient, setIsClient] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   // 客户端渲染检查
   useEffect(() => {
-    setIsClient(true);
+    try {
+      setIsClient(true);
+    } catch (error) {
+      console.error("Overview组件渲染错误:", error);
+      setHasError(true);
+    }
   }, []);
+
+  if (hasError) {
+    return (
+      <div className="h-[300px] w-full flex items-center justify-center text-muted-foreground">
+        图表加载失败，请刷新页面
+      </div>
+    );
+  }
 
   if (!isClient) {
     return <div className="h-[300px] w-full flex items-center justify-center">加载中...</div>;
