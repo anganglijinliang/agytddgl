@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { DashboardClient } from "./dashboard-client";
+import { DashboardStatic } from "../dashboard-static";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -13,6 +14,9 @@ export const metadata: Metadata = {
 // 避免缓存造成问题
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+// 是否使用静态版本 (默认使用静态版本避免循环加载问题)
+const USE_STATIC_VERSION = true;
 
 export default async function DashboardPage() {
   console.log("服务器端渲染DashboardPage");
@@ -32,6 +36,17 @@ export default async function DashboardPage() {
     redirect("/login?error=auth");
   }
   
+  // 如果使用静态版本，直接返回不进行数据库查询
+  if (USE_STATIC_VERSION) {
+    console.log("使用静态仪表盘版本，跳过数据库查询");
+    return (
+      <Suspense fallback={<div className="p-8 text-center">正在加载仪表盘...</div>}>
+        <DashboardStatic />
+      </Suspense>
+    );
+  }
+  
+  // 以下是动态版本的逻辑，仅在USE_STATIC_VERSION=false时执行
   // 获取用户信息
   try {
     const user = await db.user.findUnique({
