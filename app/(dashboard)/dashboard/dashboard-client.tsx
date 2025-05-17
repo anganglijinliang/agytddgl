@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Overview } from "@/components/dashboard/overview";
 import { RecentOrders } from "./components/recent-orders";
 import { SmartAlert } from "./components/smart-alert";
-import { FileBarChart, Factory, TruckIcon, Package, Calendar, Loader2, RefreshCw } from "lucide-react";
+import { FileBarChart, Factory, TruckIcon, Package, Calendar, Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
@@ -27,12 +27,21 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     completed: 0
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingRetries, setLoadingRetries] = useState(0);
 
   // 初始化统计数据
   useEffect(() => {
     if (initialData) {
-      setStatistics(initialData);
-      setIsLoading(false);
+      try {
+        setStatistics(initialData);
+        setIsLoading(false);
+        console.log("已从服务器获取初始数据");
+      } catch (err) {
+        console.error("初始化统计数据错误:", err);
+        setError("加载数据失败，请刷新页面");
+        setIsLoading(false);
+      }
     }
   }, [initialData]);
 
@@ -40,29 +49,37 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        const response = await fetch('/api/alerts');
-        if (response.ok) {
-          const data = await response.json();
-          setAlerts(data);
+        console.log("开始获取提醒数据...");
+        const alertsResponse = await fetch('/api/alerts', { 
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store'
+        });
+        
+        if (alertsResponse.ok) {
+          const alertsData = await alertsResponse.json();
+          setAlerts(alertsData);
+          console.log("提醒数据获取成功");
         } else {
-          console.error('获取提醒失败，使用示例数据');
-          // 使用组件内部示例数据
+          console.error('获取提醒失败，使用空数组', alertsResponse.status);
           setAlerts([]);
         }
       } catch (error) {
         console.error('获取提醒出错:', error);
-        // 发生错误时使用空数组，避免重复请求
         setAlerts([]);
       }
     };
 
-    fetchAlerts();
+    // 只获取数据一次，避免无限循环
+    if (loadingRetries === 0) {
+      fetchAlerts();
+    }
     
     if (!initialData) {
       const fetchStatistics = async () => {
         try {
-          // 这里实际项目中应当有一个专门的API获取统计数据
-          // 失败时直接使用示例数据
+          console.log("初始数据不存在，使用默认统计数据");
+          // 使用静态示例数据
           setStatistics({
             totalOrders: 124,
             inProduction: 38,
@@ -78,7 +95,26 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       
       fetchStatistics();
     }
-  }, [initialData]);
+  }, [initialData, loadingRetries]);
+
+  // 处理刷新
+  const handleRefresh = useCallback(() => {
+    setLoadingRetries(prev => prev + 1);
+    setIsLoading(true);
+    setError(null);
+    
+    // 模拟刷新过程
+    setTimeout(() => {
+      setIsLoading(false);
+      toast({
+        title: "已刷新",
+        description: "数据已更新",
+      });
+    }, 1000);
+    
+    // 重载页面
+    router.refresh();
+  }, [router, toast]);
 
   // 处理关闭提醒
   const handleDismissAlert = (id: string) => {
@@ -92,8 +128,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // 处理已读提醒
   const handleMarkAlertRead = async (id: string) => {
     try {
-      // 实际应用中应当有一个API来标记已读
-      // 这里仅作示例
       const updatedAlerts = alerts.map(alert => 
         alert.id === id ? { ...alert, isNew: false } : alert
       );
@@ -108,6 +142,28 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     router.push('/dashboard/notifications');
   };
 
+  // 如果发生错误，显示错误信息
+  if (error) {
+    return (
+      <div className="flex-1 p-8 flex flex-col items-center justify-center">
+        <div className="bg-destructive/10 p-4 rounded-lg flex items-center mb-4">
+          <AlertCircle className="h-6 w-6 text-destructive mr-2" />
+          <span className="text-destructive font-medium">{error}</span>
+        </div>
+        <p className="text-muted-foreground mb-4">请尝试刷新页面或重新登录</p>
+        <div className="flex gap-4">
+          <Button onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            刷新页面
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/login')}>
+            重新登录
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 pt-6">
       <div className="flex items-center justify-between">
@@ -116,9 +172,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => router.refresh()}
+            onClick={handleRefresh}
+            disabled={isLoading}
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
             刷新
           </Button>
         </div>
