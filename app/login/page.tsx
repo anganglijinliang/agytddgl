@@ -1,13 +1,7 @@
 "use client";
 
-import { Metadata } from "next";
 import LoginForm from "./form";
 import { LoginRecovery } from "./recovery";
-
-export const metadata: Metadata = {
-  title: "登录 | 安钢集团永通球墨铸铁管有限责任公司",
-  description: "登录到订单管理系统",
-};
 
 export default function LoginPage() {
   return (
