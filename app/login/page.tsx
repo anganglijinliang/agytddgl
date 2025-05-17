@@ -1,7 +1,13 @@
 "use client";
 
+import { Suspense } from "react";
 import LoginForm from "./form";
 import { LoginRecovery } from "./recovery";
+
+// 创建一个简单的加载组件
+function Loading() {
+  return <div className="text-center p-4">加载中...</div>;
+}
 
 export default function LoginPage() {
   return (
@@ -13,11 +19,15 @@ export default function LoginPage() {
         </p>
       </div>
       
-      {/* 先显示恢复组件 */}
-      <LoginRecovery />
+      {/* 用Suspense包裹恢复组件 */}
+      <Suspense fallback={<Loading />}>
+        <LoginRecovery />
+      </Suspense>
       
-      {/* 然后显示登录表单 */}
-      <LoginForm />
+      {/* 使用Suspense包裹LoginForm */}
+      <Suspense fallback={<Loading />}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 } 
